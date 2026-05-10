@@ -45,7 +45,7 @@ export default function Login() {
           }
         });
         if (error) throw error;
-        alert('Cek email Anda untuk konfirmasi pendaftaran!');
+        alert('Cek email Anda untuk konfirmasi pendaftaran! (Jika email konfirmasi aktif di Supabase)');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -55,7 +55,14 @@ export default function Login() {
       }
     } catch (error: any) {
       console.error('Auth error:', error);
-      setErrorMsg(error.message || 'Terjadi kesalahan saat masuk.');
+      // Show more descriptive error for debugging
+      if (error.message === 'Invalid path specified in request URL') {
+        setErrorMsg('Konfigurasi URL Supabase di supabaseClient.js salah. Hapus "/rest/v1/" di akhir URL.');
+      } else if (error.status === 401 || error.status === 403) {
+        setErrorMsg('API Key (Public Key) tidak valid. Pastikan menggunakan Anon Key dari Supabase.');
+      } else {
+        setErrorMsg(error.message || 'Gagal masuk. Periksa kembali data Anda.');
+      }
     } finally {
       setLoading(false);
     }

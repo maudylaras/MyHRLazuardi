@@ -112,9 +112,14 @@ export default function App() {
 
       if (insertError) throw insertError;
       setProfile(mapProfile(insertedData));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching profile:', error);
+      // If table doesn't exist or other DB error, we still want to show something or allow retry
+      if (error.code === '42P01') {
+        console.error('Tabel "profiles" belum dibuat di database Supabase Anda.');
+      }
     } finally {
+      // Logic for finalizing loading should be outside or handled with a flag
       setLoading(false);
     }
   };
