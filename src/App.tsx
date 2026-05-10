@@ -147,10 +147,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {user && profile ? (
+      {!user ? (
+        <Login />
+      ) : profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <Login />
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50 space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-slate-500 font-medium animate-pulse">Menghubungkan ke profil Anda...</p>
+        </div>
       )}
     </div>
   );
