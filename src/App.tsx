@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase } from './supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
@@ -13,7 +13,7 @@ export default function App() {
 
   useEffect(() => {
     // Check active sessions and subscribe to auth changes
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user);
@@ -114,15 +114,6 @@ export default function App() {
     createdAt: dbData.created_at
   });
 
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
@@ -136,7 +127,7 @@ export default function App() {
       {user && profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <Login onLogin={handleLogin} />
+        <Login />
       )}
     </div>
   );

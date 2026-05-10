@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { 
   UserProfile, 

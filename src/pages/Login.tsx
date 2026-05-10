@@ -1,11 +1,23 @@
 import { motion } from 'motion/react';
-import { LogIn, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
-interface LoginProps {
-  onLogin: () => void;
-}
+export default function Login() {
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Gagal masuk dengan Google. Silakan coba lagi.');
+    }
+  };
 
-export default function Login({ onLogin }: LoginProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-blue-600 p-6">
       <motion.div 
@@ -24,7 +36,7 @@ export default function Login({ onLogin }: LoginProps) {
         <div className="space-y-4">
           <button
             id="login-btn"
-            onClick={onLogin}
+            onClick={handleGoogleLogin}
             className="group flex w-full items-center justify-center gap-3 rounded-xl border-2 border-slate-200 bg-white px-4 py-4 text-lg font-semibold transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95"
           >
             <img src="https://www.google.com/favicon.ico" alt="Google" className="h-6 w-6" />
