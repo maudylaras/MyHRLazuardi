@@ -8,8 +8,11 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
+    setErrorMsg(null);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -18,24 +21,35 @@ export default function Login() {
         }
       });
       if (error) throw error;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      alert('Gagal masuk dengan Google. Silakan coba lagi.');
+      setErrorMsg(error.message || 'Gagal masuk dengan Google.');
     }
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
+    
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error('Login error:', error);
-      alert('Gagal masuk. Periksa email dan password Anda.');
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        alert('Cek email Anda untuk konfirmasi pendaftaran!');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Auth error:', error);
+      setErrorMsg(error.message || 'Terjadi kesalahan saat masuk.');
     } finally {
       setLoading(false);
     }
@@ -98,9 +112,15 @@ export default function Login() {
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                onSubmit={handleEmailLogin}
+                onSubmit={handleSubmit}
                 className="space-y-4"
               >
+                {errorMsg && (
+                  <div className="rounded-xl bg-red-50 p-4 border border-red-100">
+                    <p className="text-xs text-red-600 font-bold text-center">{errorMsg}</p>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email Karyawan</label>
                   <div className="relative">
@@ -149,14 +169,28 @@ export default function Login() {
                   ) : (
                     <>
                       <LogIn size={20} />
-                      Masuk Sekarang
+                      {isSignUp ? 'Daftar Sekarang' : 'Masuk Sekarang'}
                     </>
                   )}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setShowEmailLogin(false)}
+                  onClick={() => {
+                    setIsSignUp(!isSignUp);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full text-center text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors py-1"
+                >
+                  {isSignUp ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Daftar'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEmailLogin(false);
+                    setErrorMsg(null);
+                  }}
                   className="flex w-full items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors py-2"
                 >
                   Kembali ke Google Login
