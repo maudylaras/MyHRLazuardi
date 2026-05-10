@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldCheck, Mail, Lock, LogIn } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, LogIn, User } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 export default function Login() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,6 +38,11 @@ export default function Login() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: name,
+            }
+          }
         });
         if (error) throw error;
         alert('Cek email Anda untuk konfirmasi pendaftaran!');
@@ -118,6 +124,25 @@ export default function Login() {
                 {errorMsg && (
                   <div className="rounded-xl bg-red-50 p-4 border border-red-100">
                     <p className="text-xs text-red-600 font-bold text-center">{errorMsg}</p>
+                  </div>
+                )}
+
+                {isSignUp && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nama Lengkap</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 pointer-events-none">
+                        <User size={18} />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Nama Lengkap Anda"
+                        className="w-full pl-11 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all font-medium text-slate-900"
+                      />
+                    </div>
                   </div>
                 )}
 
