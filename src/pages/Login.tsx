@@ -32,8 +32,9 @@ export default function Login({ onLogin }: LoginProps) {
           </button>
         </div>
 
-        <div className="pt-6 text-center text-sm text-slate-400">
-          &copy; 2026 MyHR Lazuardi. All rights reserved.
+        <div className="pt-6 text-center text-slate-400">
+          <p className="text-sm">&copy; 2026 MyHR Lazuardi. All rights reserved.</p>
+          <p className="text-[10px] font-black uppercase tracking-widest mt-2">administrator maudy@lazuardi.sch.id</p>
         </div>
       </motion.div>
     </div>

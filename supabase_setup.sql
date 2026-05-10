@@ -1,5 +1,6 @@
 -- 1. PROFILES TABLE
 -- This table stores all employee information.
+-- NOTE: Maudy (maudy@lazuardi.sch.id) is the designated System Administrator.
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     niy TEXT,
@@ -30,6 +31,23 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- AUTO-ADMIN TRIGGER FOR MAUDY
+-- This ensures maudy@lazuardi.sch.id is always an admin even if manually edited
+CREATE OR REPLACE FUNCTION public.handle_admin_assignment()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.email = 'maudy@lazuardi.sch.id' THEN
+        NEW.role := 'admin';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS on_profile_upsert_admin ON public.profiles;
+CREATE TRIGGER on_profile_upsert_admin
+BEFORE INSERT OR UPDATE ON public.profiles
+FOR EACH ROW EXECUTE FUNCTION public.handle_admin_assignment();
 
 -- RLS for Profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

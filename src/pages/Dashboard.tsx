@@ -1112,7 +1112,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                                />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight truncate text-base">{emp.name}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight truncate text-base">{emp.name}</h4>
+                                {emp.role === 'admin' && (
+                                  <span className="bg-blue-100 text-blue-600 text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter shrink-0 border border-blue-200">ADMIN</span>
+                                )}
+                              </div>
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{emp.unit || 'NO UNIT'} • {emp.position}</p>
                             </div>
                             {isAdmin && emp.email !== profile.email && (
