@@ -4,7 +4,7 @@ import { User } from '@supabase/supabase-js';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -51,23 +51,27 @@ export default function App() {
     try {
       // 1. Optimized Path: Most users will have a profile linked to their UID.
       // Fetching by ID is the fastest possible index look-up.
-      const { data: idData } = await supabase
+      const { data: idData, error: idError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
+      if (idError) throw idError;
+
       if (idData) {
         setProfile(mapProfile(idData));
         return;
       }
 
       // 2. Secondary Path: Check by email if ID not found (New login for existing record)
-      const { data: emailData } = await supabase
+      const { data: emailData, error: emailError } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', supabaseUser.email)
         .maybeSingle();
+      
+      if (emailError) throw emailError;
       
       if (emailData) {
         // Link and return
@@ -161,18 +165,59 @@ export default function App() {
         <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
         <div className="text-center">
           <p className="font-bold text-slate-800 tracking-tight text-lg">Memuat Profil...</p>
+          <p className="text-xs text-slate-400 font-medium">Ini biasanya memakan waktu beberapa detik</p>
         </div>
       </div>
     );
   }
 
+  const renderContent = () => {
+    if (!user) return <Login />;
+    
+    if (!profile) {
+      return (
+        <div className="flex h-screen w-full items-center justify-center bg-slate-50 p-6">
+          <div className="max-w-md w-full rounded-3xl bg-white p-8 shadow-xl text-center space-y-6">
+            <div className="mx-auto w-16 h-16 bg-red-50 text-red-600 flex items-center justify-center rounded-2xl">
+              <ShieldCheck size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900">Profil Tidak Ditemukan</h2>
+              <p className="mt-2 text-slate-500 font-medium">Akun Anda ({user.email}) berhasil masuk, tetapi kami tidak dapat memuat data karyawan Anda.</p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl text-left">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Penyebab Kemungkinan:</p>
+              <ul className="text-xs text-slate-600 space-y-1 font-medium list-disc ml-4">
+                <li>Tabel "profiles" belum dibuat di Supabase SQL Editor.</li>
+                <li>RLS (Row Level Security) memblokir akses baca/tulis.</li>
+                <li>Struktur kolom tabel tidak sesuai dengan aplikasi.</li>
+              </ul>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => window.location.reload()}
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"
+              >
+                Coba Muat Ulang
+              </button>
+              <button 
+                onClick={() => supabase.auth.signOut()}
+                className="w-full py-3 text-slate-500 font-bold hover:text-slate-700 transition-all"
+              >
+                Kemuar & Ganti Akun
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return <Dashboard user={user} profile={profile} />;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {user && profile ? (
-        <Dashboard user={user} profile={profile} />
-      ) : (
-        <Login />
-      )}
+      {renderContent()}
     </div>
   );
 }

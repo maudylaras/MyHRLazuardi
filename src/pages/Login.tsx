@@ -59,7 +59,9 @@ export default function Login() {
       if (error.message === 'Invalid path specified in request URL') {
         setErrorMsg('Konfigurasi URL Supabase di supabaseClient.js salah. Hapus "/rest/v1/" di akhir URL.');
       } else if (error.status === 401 || error.status === 403) {
-        setErrorMsg('API Key (Public Key) tidak valid. Pastikan menggunakan Anon Key dari Supabase.');
+        setErrorMsg('Email atau password salah, atau API Key tidak valid.');
+      } else if (error.message.includes('Email not confirmed')) {
+        setErrorMsg('Email Anda belum dikonfirmasi. Silakan cek kotak masuk email Anda dan klik tautan konfirmasi.');
       } else {
         setErrorMsg(error.message || 'Gagal masuk. Periksa kembali data Anda.');
       }
