@@ -150,13 +150,15 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    // Initial fetch
-    fetchRegs();
-    fetchFaqs();
-    fetchClaims();
-    fetchEmployees();
-    fetchAttendanceData();
-    fetchStats();
+    // Initial fetch in parallel
+    Promise.all([
+      fetchRegs(),
+      fetchFaqs(),
+      fetchClaims(),
+      fetchEmployees(),
+      fetchAttendanceData(),
+      fetchStats()
+    ]);
 
     // Set up Realtime subscriptions
     const regsSub = supabase.channel('regulations_changes')

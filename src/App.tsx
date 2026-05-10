@@ -12,93 +12,106 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active sessions and subscribe to auth changes
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      setUser(session?.user ?? null);
+    let mounted = true;
+
+    async function initAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+
       if (session?.user) {
-        fetchProfile(session.user);
+        setUser(session.user);
+        await fetchProfile(session.user);
       } else {
         setLoading(false);
       }
-    });
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      
       if (session?.user) {
-        fetchProfile(session.user);
+        setUser(session.user);
+        await fetchProfile(session.user);
       } else {
+        setUser(null);
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (supabaseUser: User) => {
     try {
-      // 1. Try to find profile by UID (already linked)
-      let { data, error } = await supabase
+      // 1. Optimized Path: Most users will have a profile linked to their UID.
+      // Fetching by ID is the fastest possible index look-up.
+      const { data: idData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
-        .single();
+        .maybeSingle();
       
-      if (error && error.code === 'PGRST116') {
-        // 2. Not found by UID, try finding by email to link existing record
-        const { data: emailData, error: emailError } = await supabase
+      if (idData) {
+        setProfile(mapProfile(idData));
+        return;
+      }
+
+      // 2. Secondary Path: Check by email if ID not found (New login for existing record)
+      const { data: emailData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', supabaseUser.email)
+        .maybeSingle();
+      
+      if (emailData) {
+        // Link and return
+        const { data: linkedData, error: linkError } = await supabase
           .from('profiles')
-          .select('*')
+          .update({ id: supabaseUser.id })
           .eq('email', supabaseUser.email)
-          .single();
-        
-        if (emailData) {
-          // Link this existing profile to the current auth ID
-          const { data: linkedData, error: linkError } = await supabase
-            .from('profiles')
-            .update({ id: supabaseUser.id })
-            .eq('email', supabaseUser.email)
-            .select()
-            .single();
-          
-          if (linkError) throw linkError;
-          setProfile(mapProfile(linkedData));
-          setLoading(false);
-          return;
-        }
-
-        // 3. Still not found, create it
-        const isMaudy = supabaseUser.email === 'maudy@lazuardi.sch.id';
-        const newProfile = {
-          id: supabaseUser.id,
-          name: isMaudy ? "Maudy Larasati.,S.Psi." : (supabaseUser.user_metadata.full_name || 'User'),
-          email: supabaseUser.email || '',
-          role: isMaudy ? 'admin' : 'employee',
-          photo_url: supabaseUser.user_metadata.avatar_url || '',
-          niy: isMaudy ? "10.25.818" : "",
-          nik: isMaudy ? "3276105508020001" : "",
-          unit: isMaudy ? "Lazuardi" : "",
-          position: isMaudy ? "Staf HRD" : "",
-          contract_status: "Full Time",
-          entry_date: isMaudy ? "2025-01-06" : null,
-          gender: isMaudy ? "Pr." : "",
-          birth_place: isMaudy ? "Jakarta" : "",
-          birth_date: isMaudy ? "2002-08-15" : null,
-          education: "S1 Psikologi - Universitas Gunadarma",
-          phone: isMaudy ? "081218496052" : "",
-        };
-
-        const { data: insertedData, error: insertError } = await supabase
-          .from('profiles')
-          .insert([newProfile])
           .select()
           .single();
-
-        if (insertError) throw insertError;
-        setProfile(mapProfile(insertedData));
-      } else if (data) {
-        setProfile(mapProfile(data));
+        
+        if (linkError) throw linkError;
+        setProfile(mapProfile(linkedData));
+        return;
       }
+
+      // 3. Fallback: Create new profile
+      const isMaudy = supabaseUser.email === 'maudy@lazuardi.sch.id';
+      const newProfile = {
+        id: supabaseUser.id,
+        name: isMaudy ? "Maudy Larasati.,S.Psi." : (supabaseUser.user_metadata.full_name || 'User'),
+        email: supabaseUser.email || '',
+        role: isMaudy ? 'admin' : 'employee',
+        photo_url: supabaseUser.user_metadata.avatar_url || '',
+        niy: isMaudy ? "10.25.818" : "",
+        nik: isMaudy ? "3276105508020001" : "",
+        unit: isMaudy ? "Lazuardi" : "",
+        position: isMaudy ? "Staf HRD" : "",
+        contract_status: "Full Time",
+        entry_date: isMaudy ? "2025-01-06" : null,
+        gender: isMaudy ? "Pr." : "",
+        birth_place: isMaudy ? "Jakarta" : "",
+        birth_date: isMaudy ? "2002-08-15" : null,
+        education: "S1 Psikologi - Universitas Gunadarma",
+        phone: isMaudy ? "081218496052" : "",
+      };
+
+      const { data: insertedData, error: insertError } = await supabase
+        .from('profiles')
+        .insert([newProfile])
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      setProfile(mapProfile(insertedData));
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
@@ -139,23 +152,21 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
+        <div className="text-center">
+          <p className="font-bold text-slate-800 tracking-tight text-lg">Memuat Profil...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {!user ? (
-        <Login />
-      ) : profile ? (
+      {user && profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50 space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-slate-500 font-medium animate-pulse">Menghubungkan ke profil Anda...</p>
-        </div>
+        <Login />
       )}
     </div>
   );
