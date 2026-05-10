@@ -1,0 +1,249 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Employee profile and account information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["employee", "admin"] },
+        "position": { "type": "string" },
+        "department": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "idpLink": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "email", "role"]
+    },
+    "CareerHistory": {
+      "title": "Career History",
+      "description": "Employee career progression log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "period": { "type": "string" },
+        "position": { "type": "string" },
+        "unit": { "type": "string" }
+      }
+    },
+    "LeaveEntitlement": {
+      "title": "Leave Entitlement",
+      "description": "Leave quota for employees.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "availableDays": { "type": "number" }
+      }
+    },
+    "AttendanceClaim": {
+      "title": "Attendance Claim",
+      "description": "Requests for attendance correction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "date": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      }
+    },
+    "Attendance": {
+      "title": "Attendance Record",
+      "description": "Individual daily attendance log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "checkIn": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "checkOut": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "status": { "type": "string", "enum": ["present", "late", "absent"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["userId", "date"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Attendance history records."
+    },
+    "regulations/{categoryId}": {
+      "schema": "RegulationCategory",
+      "description": "HR regulations and policies."
+    },
+    "helpCenter/{categoryId}": {
+      "schema": "FaqCategory",
+      "description": "Help center and FAQ data."
+    }
+  },
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Employee profile and account information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["employee", "admin"] },
+        "position": { "type": "string" },
+        "department": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "idpLink": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date" }
+      },
+      "required": ["userId", "name", "email", "role"]
+    },
+    "CareerHistory": {
+      "title": "Career History",
+      "description": "Employee career progression log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "period": { "type": "string" },
+        "position": { "type": "string" },
+        "unit": { "type": "string" }
+      }
+    },
+    "LeaveEntitlement": {
+      "title": "Leave Entitlement",
+      "description": "Leave quota for employees.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "availableDays": { "type": "number" }
+      }
+    },
+    "AttendanceClaim": {
+      "title": "Attendance Claim",
+      "description": "Requests for attendance correction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "date": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      }
+    },
+    "Attendance": {
+      "title": "Attendance Record",
+      "description": "Individual daily attendance log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "checkIn": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "checkOut": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "status": { "type": "string", "enum": ["present", "late", "absent"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["userId", "date"]
+    },
+    "RegulationCategory": {
+      "title": "Regulation Category",
+      "description": "A category of HR regulations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "order": { "type": "number" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "iconType": { "type": "string", "enum": ["check", "alert"] }
+            }
+          }
+        }
+      }
+    },
+    "FaqCategory": {
+      "title": "FAQ Category",
+      "description": "A category of help center items.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "order": { "type": "number" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "question": { "type": "string" },
+              "answer": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
