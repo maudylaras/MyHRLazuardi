@@ -37,14 +37,37 @@ export default function App() {
 
   const fetchProfile = async (supabaseUser: User) => {
     try {
-      const { data, error } = await supabase
+      // 1. Try to find profile by UID (already linked)
+      let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist, create it
+        // 2. Not found by UID, try finding by email to link existing record
+        const { data: emailData, error: emailError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', supabaseUser.email)
+          .single();
+        
+        if (emailData) {
+          // Link this existing profile to the current auth ID
+          const { data: linkedData, error: linkError } = await supabase
+            .from('profiles')
+            .update({ id: supabaseUser.id })
+            .eq('email', supabaseUser.email)
+            .select()
+            .single();
+          
+          if (linkError) throw linkError;
+          setProfile(mapProfile(linkedData));
+          setLoading(false);
+          return;
+        }
+
+        // 3. Still not found, create it
         const isMaudy = supabaseUser.email === 'maudy@lazuardi.sch.id';
         const newProfile = {
           id: supabaseUser.id,

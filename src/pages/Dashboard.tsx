@@ -246,6 +246,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   };
 
   const fetchEmployees = async () => {
+    if (!isAdmin) return;
     const { data } = await supabase.from('profiles').select('*');
     if (data) {
       setAllEmployees(data.map(emp => ({
