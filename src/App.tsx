@@ -70,25 +70,36 @@ export default function App() {
 
       // 2. Jalur Kedua: Cari berdasarkan Email (untuk data impor)
       if (userEmail) {
+        console.log('Mencari data untuk email:', userEmail);
         const { data: emailData, error: emailError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('email', userEmail)
-          .maybeSingle();
+          .eq('email', userEmail); // Gunakan array dulu untuk cek duplikasi
         
         if (emailError) throw emailError;
         
-        if (emailData) {
+        if (emailData && emailData.length > 0) {
+          // Jika ada lebih dari satu, ambil yang pertama saja
+          const targetRecord = emailData[0];
+          console.log('Data ditemukan melalui email. Menyambungkan ke UID:', supabaseUser.id);
+
           // SAMBUNGKAN: Update profil lama dengan ID baru
           const { data: linkedData, error: linkError } = await supabase
             .from('profiles')
             .update({ id: supabaseUser.id })
             .eq('email', userEmail)
             .select()
-            .single();
+            .maybeSingle(); // Gunakan maybeSingle agar tidak error jika update kena constraint
           
-          if (linkError) throw linkError;
-          setProfile(mapProfile(linkedData));
+          if (linkError) {
+            console.error('Gagal menyambungkan ID ke email:', linkError);
+            // Jika gagal update ID (mungkin karena constraint), kita tetap pakai data yang ada tapi di memory saja
+            setProfile(mapProfile(targetRecord));
+          } else if (linkedData) {
+            setProfile(mapProfile(linkedData));
+          } else {
+            setProfile(mapProfile(targetRecord));
+          }
           return;
         }
       }
@@ -190,22 +201,30 @@ export default function App() {
             
             <div className="p-4 bg-slate-50 rounded-xl text-left space-y-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Login:</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Login Anda:</p>
                 <p className="text-sm font-bold text-slate-700">{user.email}</p>
+                <p className="text-[10px] text-slate-400 font-mono mt-1">UID: {user.id}</p>
               </div>
               
               {debugError && (
                 <div className="pt-2 border-t border-slate-200">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Detail Kesalahan:</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Pesan Error:</p>
                   <p className="text-xs font-medium text-red-600 bg-red-50 p-2 rounded mt-1">{debugError}</p>
                 </div>
               )}
 
               <div className="pt-2 border-t border-slate-200">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Solusi (Supabase SQL Editor):</p>
-                <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
-                  ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
-                </code>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Solusi Perbaikan (SQL Editor):</p>
+                <div className="space-y-2">
+                  <p className="text-[9px] text-slate-500 leading-tight">1. Matikan keamanan agar aplikasi bisa membaca data:</p>
+                  <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
+                    ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+                  </code>
+                  <p className="text-[9px] text-slate-500 leading-tight">2. Jika error UUID muncul saat impor, hilangkan kolom ID di CSV Anda atau jalankan ini:</p>
+                  <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
+                    ALTER TABLE profiles ALTER COLUMN id DROP NOT NULL;
+                  </code>
+                </div>
               </div>
             </div>
 
