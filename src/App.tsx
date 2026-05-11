@@ -50,6 +50,7 @@ export default function App() {
   }, []);
 
   const fetchProfile = async (supabaseUser: User) => {
+    if (!supabaseUser) return;
     setDebugError(null);
     try {
       const userEmail = supabaseUser.email?.toLowerCase().trim();
@@ -70,18 +71,15 @@ export default function App() {
 
       // 2. Jalur Kedua: Cari berdasarkan Email (untuk data impor)
       if (userEmail) {
-        console.log('Mencari data untuk email:', userEmail);
         const { data: emailData, error: emailError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('email', userEmail); // Gunakan array dulu untuk cek duplikasi
+          .eq('email', userEmail);
         
         if (emailError) throw emailError;
         
         if (emailData && emailData.length > 0) {
-          // Jika ada lebih dari satu, ambil yang pertama saja
           const targetRecord = emailData[0];
-          console.log('Data ditemukan melalui email. Menyambungkan ke UID:', supabaseUser.id);
 
           // SAMBUNGKAN: Update profil lama dengan ID baru
           const { data: linkedData, error: linkError } = await supabase
@@ -89,11 +87,9 @@ export default function App() {
             .update({ id: supabaseUser.id })
             .eq('email', userEmail)
             .select()
-            .maybeSingle(); // Gunakan maybeSingle agar tidak error jika update kena constraint
+            .maybeSingle();
           
           if (linkError) {
-            console.error('Gagal menyambungkan ID ke email:', linkError);
-            // Jika gagal update ID (mungkin karena constraint), kita tetap pakai data yang ada tapi di memory saja
             setProfile(mapProfile(targetRecord));
           } else if (linkedData) {
             setProfile(mapProfile(linkedData));
@@ -104,7 +100,7 @@ export default function App() {
         }
       }
 
-      // 3. Fallback: Buat profil baru jika benar-benar tidak ada
+      // 3. Fallback: Buat profil baru
       const isMaudy = userEmail === 'maudy@lazuardi.sch.id';
       const newProfile = {
         id: supabaseUser.id,
@@ -126,15 +122,12 @@ export default function App() {
         .maybeSingle();
 
       if (insertError) {
-        // Jika gagal insert (misal RLS aktif), kita simpan errornya
-        console.error('Insert Error:', insertError);
-        setDebugError(`Gagal membuat profil: ${insertError.message} (Code: ${insertError.code})`);
+        setDebugError(`Gagal membuat profil: ${insertError.message}`);
       } else if (insertedData) {
         setProfile(mapProfile(insertedData));
       }
     } catch (error: any) {
-      console.error('Profile Fetch Error:', error);
-      setDebugError(error.message || 'Terjadi kesalahan saat mengambil profil.');
+      setDebugError(error.message || 'Terjadi kesalahan.');
     } finally {
       setLoading(false);
     }
@@ -142,35 +135,38 @@ export default function App() {
 
 
   // Helper to map DB snake_case to Frontend camelCase
-  const mapProfile = (dbData: any): UserProfile => ({
-    userId: dbData.id,
-    niy: dbData.niy,
-    name: dbData.name,
-    nik: dbData.nik,
-    bpjs: dbData.bpjs,
-    email: dbData.email,
-    npwp: dbData.npwp,
-    unit: dbData.unit,
-    position: dbData.position,
-    contractStatus: dbData.contract_status,
-    entryDate: dbData.entry_date,
-    gender: dbData.gender,
-    birthPlace: dbData.birth_place,
-    birthDate: dbData.birth_date,
-    educationLevel: dbData.education_level,
-    education: dbData.education,
-    address: dbData.address,
-    phone: dbData.phone,
-    maritalStatus: dbData.marital_status,
-    role: dbData.role,
-    photoUrl: dbData.photo_url,
-    idpLink: dbData.idp_link,
-    emergencyContact: dbData.emergency_contact,
-    careerHistory: dbData.career_history,
-    cutiData: dbData.cuti_data,
-    longServiceLeave: dbData.long_service_leave,
-    createdAt: dbData.created_at
-  });
+  const mapProfile = (dbData: any): UserProfile => {
+    if (!dbData) return {} as UserProfile;
+    return {
+      userId: dbData.id || '',
+      niy: dbData.niy || '',
+      name: dbData.name || '',
+      nik: dbData.nik || '',
+      bpjs: dbData.bpjs || '',
+      email: dbData.email || '',
+      npwp: dbData.npwp || '',
+      unit: dbData.unit || '',
+      position: dbData.position || '',
+      contractStatus: dbData.contract_status || '',
+      entryDate: dbData.entry_date || '',
+      gender: dbData.gender || '',
+      birthPlace: dbData.birth_place || '',
+      birthDate: dbData.birth_date || '',
+      educationLevel: dbData.education_level || '',
+      education: dbData.education || '',
+      address: dbData.address || '',
+      phone: dbData.phone || '',
+      maritalStatus: dbData.marital_status || '',
+      role: dbData.role || 'employee',
+      photoUrl: dbData.photo_url || '',
+      idpLink: dbData.idp_link || '',
+      emergencyContact: dbData.emergency_contact || '',
+      careerHistory: dbData.career_history || [],
+      cutiData: dbData.cuti_data || {},
+      longServiceLeave: dbData.long_service_leave || {},
+      createdAt: dbData.created_at || ''
+    };
+  };
 
   if (loading) {
     return (
@@ -191,39 +187,39 @@ export default function App() {
       return (
         <div className="flex h-screen w-full items-center justify-center bg-slate-50 p-6">
           <div className="max-w-md w-full rounded-3xl bg-white p-8 shadow-xl text-center space-y-6">
-            <div className="mx-auto w-16 h-16 bg-red-50 text-red-600 flex items-center justify-center rounded-2xl">
+            <div className="mx-auto w-16 h-16 bg-blue-50 text-blue-600 flex items-center justify-center rounded-2xl">
               <ShieldCheck size={32} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-slate-900">Profil Tidak Ditemukan</h2>
-              <p className="mt-2 text-slate-500 font-medium">Akun Anda berhasil masuk, tetapi data karyawan tidak ditemukan di database.</p>
+              <h2 className="text-2xl font-black text-slate-900">Perlu Sinkronisasi Data</h2>
+              <p className="mt-2 text-slate-500 font-medium text-sm">Akun berhasil masuk, tapi data karyawan belum tersambung.</p>
             </div>
             
             <div className="p-4 bg-slate-50 rounded-xl text-left space-y-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Login Anda:</p>
                 <p className="text-sm font-bold text-slate-700">{user.email}</p>
-                <p className="text-[10px] text-slate-400 font-mono mt-1">UID: {user.id}</p>
               </div>
               
               {debugError && (
                 <div className="pt-2 border-t border-slate-200">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Pesan Error:</p>
-                  <p className="text-xs font-medium text-red-600 bg-red-50 p-2 rounded mt-1">{debugError}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Status Database:</p>
+                  <p className="text-[10px] font-medium text-red-600 bg-red-50 p-2 rounded mt-1">{debugError}</p>
                 </div>
               )}
 
               <div className="pt-2 border-t border-slate-200">
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Solusi Perbaikan (SQL Editor):</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Solusi Perbaikan (Jalankan di SQL Editor):</p>
                 <div className="space-y-2">
-                  <p className="text-[9px] text-slate-500 leading-tight">1. Matikan keamanan agar aplikasi bisa membaca data:</p>
+                  <p className="text-[9px] text-slate-500 leading-tight">1. Matikan keamanan (Row Level Security):</p>
                   <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
                     ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
                   </code>
-                  <p className="text-[9px] text-slate-500 leading-tight">2. Jika error UUID muncul saat impor, hilangkan kolom ID di CSV Anda atau jalankan ini:</p>
+                  <p className="text-[9px] text-slate-500 leading-tight">2. Hapus batasan ID (Wajib jika impor via CSV):</p>
                   <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
                     ALTER TABLE profiles ALTER COLUMN id DROP NOT NULL;
                   </code>
+                  <p className="text-[9px] font-bold text-slate-600">3. Pastikan email di database sama persis dengan email login di atas.</p>
                 </div>
               </div>
             </div>
@@ -233,13 +229,13 @@ export default function App() {
                 onClick={() => window.location.reload()}
                 className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"
               >
-                Coba Muat Ulang
+                Refresh Halaman
               </button>
               <button 
                 onClick={() => supabase.auth.signOut()}
-                className="w-full py-3 text-slate-500 font-bold hover:text-slate-700 transition-all"
+                className="w-full py-3 text-slate-500 font-bold hover:text-slate-700 transition-all text-sm"
               >
-                Keluar & Ganti Akun
+                Keluar Aplikasi
               </button>
             </div>
           </div>

@@ -58,8 +58,12 @@ export default function Login() {
       // Show more descriptive error for debugging
       if (error.message === 'Invalid path specified in request URL') {
         setErrorMsg('Konfigurasi URL Supabase di supabaseClient.js salah. Hapus "/rest/v1/" di akhir URL.');
+      } else if (error.message === 'Invalid login credentials') {
+        setErrorMsg('Email/Password tidak ditemukan. Jika Anda staf baru, pastikan klik "DAFTAR" dulu di bawah untuk buat akun.');
+      } else if (error.message === 'User already registered') {
+        setErrorMsg('Email ini sudah pernah didaftarkan. Harap klik "MASUK" di bawah untuk login.');
       } else if (error.status === 401 || error.status === 403) {
-        setErrorMsg('Email atau password salah, atau API Key tidak valid.');
+        setErrorMsg('Akses ditolak. Periksa kembali email dan password Anda.');
       } else if (error.message.includes('Email not confirmed')) {
         setErrorMsg('Email Anda belum dikonfirmasi. Silakan cek kotak masuk email Anda dan klik tautan konfirmasi.');
       } else {
