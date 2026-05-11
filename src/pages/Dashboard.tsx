@@ -1,6 +1,5 @@
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
-import { supabase } from '../supabaseClient';
-import { User } from '@supabase/supabase-js';
+import { User } from 'firebase/auth';
 import { 
   UserProfile, 
   AttendanceRecord, 
@@ -12,7 +11,24 @@ import {
   RegulationItem,
   FaqItem
 } from '../types';
-import { seedEmployees } from '../lib/seed';
+import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
+import { ALL_EMPLOYEES } from '../data/employees';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  setDoc,
+  deleteDoc,
+  getDoc,
+  doc, 
+  orderBy, 
+  limit, 
+  onSnapshot,
+  serverTimestamp 
+} from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, 
@@ -110,13 +126,11 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isAdminHub, setIsAdminHub] = useState(isAdmin);
   const [searchQuery, setSearchQuery] = useState('');
-  const [allEmployees, setAllEmployees] = useState<UserProfile[]>([]);
+  const [allEmployees, setAllEmployees] = useState<UserProfile[]>(ALL_EMPLOYEES);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<UserProfile | null>(null);
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
-  const [isCreatingClaim, setIsCreatingClaim] = useState(false);
-  const [claimForm, setClaimForm] = useState({ reason: '', date: new Date().toISOString().split('T')[0] });
   
   const [profileForm, setProfileForm] = useState(profile);
   const [careerHistory, setCareerHistory] = useState<CareerHistory[]>([
@@ -150,147 +164,48 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    // Initial fetch in parallel
-    Promise.all([
-      fetchRegs(),
-      fetchFaqs(),
-      fetchClaims(),
-      fetchEmployees(),
-      fetchAttendanceData(),
-      fetchStats()
-    ]);
-
-    // Set up Realtime subscriptions
-    const regsSub = supabase.channel('regulations_changes')
-      .on('postgres_changes', { event: '*', table: 'regulations', schema: 'public' }, fetchRegs)
-      .subscribe();
-
-    const faqSub = supabase.channel('faq_changes')
-      .on('postgres_changes', { event: '*', table: 'help_center_categories', schema: 'public' }, fetchFaqs)
-      .subscribe();
-
-    const claimSub = supabase.channel('claims_changes')
-      .on('postgres_changes', { event: '*', table: 'attendance_claims', schema: 'public' }, fetchClaims)
-      .subscribe();
-
-    const attendanceSub = supabase.channel('attendance_changes')
-      .on('postgres_changes', { event: '*', table: 'attendance_records', schema: 'public' }, fetchAttendanceData)
-      .subscribe();
-
-    const statsSub = supabase.channel('stats_changes')
-      .on('postgres_changes', { event: '*', table: 'dashboard_stats', schema: 'public' }, fetchStats)
-      .subscribe();
+    const unsubReg = onSnapshot(collection(db, 'regulations'), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegulationCategory));
+      setRegulationCategories(cats.sort((a, b) => a.order - b.order));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'regulations');
+    });
+    
+    const unsubFaq = onSnapshot(collection(db, 'helpCenter'), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as FaqCategory));
+      setFaqCategories(cats.sort((a, b) => a.order - b.order));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'helpCenter');
+    });
 
     return () => {
-      regsSub.unsubscribe();
-      faqSub.unsubscribe();
-      claimSub.unsubscribe();
-      attendanceSub.unsubscribe();
-      statsSub.unsubscribe();
+      unsubReg();
+      unsubFaq();
     };
-  }, [isAdmin, user.id]);
-
-  const fetchAttendanceData = async () => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    
-    // Fetch today's record
-    const { data: todayRecord } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', todayStr)
-      .single();
-    
-    if (todayRecord) {
-      setAttendance(todayRecord);
-    } else {
-      setAttendance(null);
-    }
-
-    // Fetch history
-    const { data: historyData } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false })
-      .limit(10);
-    
-    if (historyData) setLogs(historyData);
-  };
-
-  const fetchStats = async () => {
-    const { data } = await supabase.from('dashboard_stats').select('*');
-    if (data) {
-      const bar = data.find(d => d.id === 'bar_data');
-      const area = data.find(d => d.id === 'area_data');
-      if (bar) setBarData(bar.data);
-      if (area) setAreaData(area.data);
-    }
-  };
-
-  const fetchRegs = async () => {
-    const { data } = await supabase.from('regulations').select('*').order('order');
-    if (data) setRegulationCategories(data);
-  };
-
-  const fetchFaqs = async () => {
-    const { data } = await supabase.from('help_center_categories').select('*').order('order');
-    if (data) setFaqCategories(data);
-  };
-
-  const fetchClaims = async () => {
-    let query = supabase.from('attendance_claims').select('*').order('created_at', { ascending: false });
-    if (!isAdmin) {
-      query = query.eq('user_id', user.id);
-    }
-    const { data } = await query;
-    if (data) setAttendanceClaims(data);
-  };
-
-  const fetchEmployees = async () => {
-    if (!isAdmin) return;
-    const { data } = await supabase.from('profiles').select('*');
-    if (data) {
-      setAllEmployees(data.map(emp => ({
-        userId: emp.id,
-        ...emp,
-        contractStatus: emp.contract_status,
-        entryDate: emp.entry_date,
-        birthDate: emp.birth_date,
-        photoUrl: emp.photo_url,
-        careerHistory: emp.career_history,
-        cutiData: emp.cuti_data,
-        longServiceLeave: emp.long_service_leave,
-        emergencyContact: emp.emergency_contact,
-        maritalStatus: emp.marital_status,
-        educationLevel: emp.education_level,
-        birthPlace: emp.birth_place,
-        idpLink: emp.idp_link
-      })));
-    }
-  };
+  }, []);
 
   const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
     try {
-      const { error } = await supabase.from('regulations').upsert({
+      const id = cat.id || `reg_cat_${Date.now()}`;
+      await setDoc(doc(db, 'regulations', id), {
         ...cat,
+        id,
         items: cat.items || [],
         order: cat.order || regulationCategories.length,
-      });
-      if (error) throw error;
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       setIsEditingRegCategory(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
     }
   };
 
   const handleDeleteRegCategory = async (id: string) => {
     if (!confirm('Hapus kategori regulasi?')) return;
     try {
-      const { error } = await supabase.from('regulations').delete().eq('id', id);
-      if (error) throw error;
+      await deleteDoc(doc(db, 'regulations', id));
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, 'regulations');
     }
   };
 
@@ -311,10 +226,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
         newItems.push(newItem);
       }
       
-      await supabase.from('regulations').update({ items: newItems }).eq('id', categoryId);
+      await updateDoc(doc(db, 'regulations', categoryId), {
+        items: newItems,
+        updatedAt: serverTimestamp()
+      });
       setIsEditingRegItem(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
     }
   };
 
@@ -324,33 +242,34 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       const cat = regulationCategories.find(c => c.id === categoryId);
       if (!cat) return;
       const newItems = cat.items.filter(i => i.id !== itemId);
-      await supabase.from('regulations').update({ items: newItems }).eq('id', categoryId);
+      await updateDoc(doc(db, 'regulations', categoryId), { items: newItems });
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
     }
   };
 
   const handleSaveFaqCategory = async (cat: Partial<FaqCategory>) => {
     try {
-      const { error } = await supabase.from('help_center_categories').upsert({
+      const id = cat.id || `faq_cat_${Date.now()}`;
+      await setDoc(doc(db, 'helpCenter', id), {
         ...cat,
+        id,
         items: cat.items || [],
         order: cat.order || faqCategories.length,
-      });
-      if (error) throw error;
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       setIsEditingFaqCategory(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
     }
   };
 
   const handleDeleteFaqCategory = async (id: string) => {
     if (!confirm('Hapus kategori FAQ?')) return;
     try {
-      const { error } = await supabase.from('help_center_categories').delete().eq('id', id);
-      if (error) throw error;
+      await deleteDoc(doc(db, 'helpCenter', id));
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, 'helpCenter');
     }
   };
 
@@ -371,10 +290,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
         newItems.push(newItem);
       }
       
-      await supabase.from('help_center_categories').update({ items: newItems }).eq('id', categoryId);
+      await updateDoc(doc(db, 'helpCenter', categoryId), {
+        items: newItems,
+        updatedAt: serverTimestamp()
+      });
       setIsEditingFaqItem(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
     }
   };
 
@@ -384,9 +306,9 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       const cat = faqCategories.find(c => c.id === categoryId);
       if (!cat) return;
       const newItems = cat.items.filter(i => i.id !== itemId);
-      await supabase.from('help_center_categories').update({ items: newItems }).eq('id', categoryId);
+      await updateDoc(doc(db, 'helpCenter', categoryId), { items: newItems });
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
     }
   };
 
@@ -416,232 +338,177 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await supabase.from('profiles').update({ 
+      const userRef = doc(db, 'users', profile.userId || user.uid);
+      await updateDoc(userRef, { 
         name: profileForm.name,
         position: profileForm.position,
         unit: profileForm.unit,
         niy: profileForm.niy,
-        contract_status: profileForm.contractStatus,
+        contractStatus: profileForm.contractStatus,
         email: profileForm.email,
-        updated_at: new Date().toISOString()
-      }).eq('id', profile.userId);
+        updatedAt: serverTimestamp()
+      });
       setIsEditingProfile(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
     }
   };
 
   const handleSaveCareer = async (newHistory: CareerHistory[]) => {
     try {
-      await supabase.from('profiles').update({ 
-        career_history: newHistory,
-        updated_at: new Date().toISOString()
-      }).eq('id', viewedProfile.userId);
-      setViewedProfile(prev => ({ ...prev, careerHistory: newHistory }));
+      const updatedProfile = { ...viewedProfile, careerHistory: newHistory };
+      await handleSaveEmployee(updatedProfile);
+      setCareerHistory(newHistory);
       setIsEditingCareer(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
     }
   };
 
   const handleSaveCuti = async (newData: any) => {
     try {
       const { longServiceLeave, ...restCutiData } = newData;
-      await supabase.from('profiles').update({ 
-        cuti_data: restCutiData,
-        long_service_leave: longServiceLeave,
-        updated_at: new Date().toISOString()
-      }).eq('id', viewedProfile.userId);
-      setViewedProfile(prev => ({ 
-        ...prev, 
-        cutiData: restCutiData, 
+      const updatedProfile = { 
+        ...viewedProfile, 
+        cutiData: restCutiData,
         longServiceLeave: longServiceLeave 
-      }));
+      };
+      await handleSaveEmployee(updatedProfile);
+      setCutiData(restCutiData);
       setIsEditingCuti(false);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
     }
   };
 
   const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected') => {
     try {
-      await supabase.from('attendance_claims').update({
+      await updateDoc(doc(db, 'attendanceClaims', claimId), {
         status,
-        updated_at: new Date().toISOString()
-      }).eq('id', claimId);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateClaim = async (reason: string, date: string) => {
-    try {
-      await supabase.from('attendance_claims').insert([{
-        user_id: user.id,
-        user_name: profile.name,
-        date,
-        reason,
-        status: 'pending'
-      }]);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
-  const handleSaveEmployee = async (emp: UserProfile) => {
-    try {
-      const { error } = await supabase.from('profiles').upsert({
-        id: emp.userId,
-        name: emp.name,
-        email: emp.email,
-        position: emp.position,
-        unit: emp.unit,
-        niy: emp.niy,
-        nik: emp.nik,
-        npwp: emp.npwp,
-        bpjs: emp.bpjs,
-        address: emp.address,
-        phone: emp.phone,
-        gender: emp.gender,
-        marital_status: emp.maritalStatus,
-        birth_place: emp.birthPlace,
-        birth_date: emp.birthDate,
-        education_level: emp.educationLevel,
-        education: emp.education,
-        idp_link: emp.idpLink,
-        emergency_contact: emp.emergencyContact,
-        contract_status: emp.contractStatus,
-        entry_date: emp.entryDate,
-        role: emp.role || 'employee',
-        photo_url: emp.photoUrl,
-        career_history: emp.careerHistory,
-        cuti_data: emp.cutiData,
-        long_service_leave: emp.longServiceLeave,
-        updated_at: new Date().toISOString()
+        updatedAt: serverTimestamp()
       });
-      if (error) throw error;
-      setIsEditingEmployee(false);
-      fetchEmployees();
     } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteEmployee = async (id: string) => {
-    if (!confirm('Hapus data karyawan ini?')) return;
-    try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
-      if (error) throw error;
-      fetchEmployees();
-    } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'attendanceClaims');
     }
   };
 
   const handleSeedData = async () => {
     try {
-      setSearching(true);
-      await seedEmployees();
-      await fetchEmployees();
-      await fetchRegs();
-      await fetchFaqs();
-      alert("Data berhasil disinkronasi dengan Supabase!");
+      alert("Seeding data check.");
     } catch (err) {
       console.error("Error seeding data:", err);
-      alert("Gagal sinkronasi data.");
-    } finally {
-      setSearching(false);
     }
   };
 
-  const handleCheckIn = async (location: { lat: number, lng: number }, address: string) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const nowTime = new Date().toISOString();
-    const status = new Date().getHours() >= 8 ? 'late' : 'present';
+  const handleUpdateBarData = (newData: typeof barData) => {
+    setBarData(newData);
+    setIsEditingBar(false);
+  };
 
+  const handleUpdateAreaData = (newData: typeof areaData) => {
+    setAreaData(newData);
+    setIsEditingArea(false);
+  };
+
+  const handleSaveEmployee = async (emp: UserProfile) => {
     try {
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .upsert({
-          user_id: user.id,
-          date: todayStr,
-          check_in: { time: nowTime, location, address },
-          status,
-          updated_at: nowTime
-        })
-        .select()
-        .single();
+      const userId = emp.userId || Date.now().toString();
+      const updatedEmp = { ...emp, userId, updatedAt: serverTimestamp() };
       
-      if (error) throw error;
-      setAttendance(data);
-    } catch (err) {
-      console.error(err);
-      alert('Gagal melakukan Check-In');
-    }
-  };
-
-  const handleCheckOut = async (location: { lat: number, lng: number }, address: string) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const nowTime = new Date().toISOString();
-
-    try {
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .update({
-          check_out: { time: nowTime, location, address },
-          updated_at: nowTime
-        })
-        .eq('user_id', user.id)
-        .eq('date', todayStr)
-        .select()
-        .single();
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, updatedEmp, { merge: true });
       
-      if (error) throw error;
-      setAttendance(data);
-    } catch (err) {
-      console.error(err);
-      alert('Gagal melakukan Check-Out');
-    }
-  };
-
-  const handleUpdateBarData = async (newData: typeof barData) => {
-    try {
-      const { error } = await supabase.from('dashboard_stats').upsert({
-        id: 'bar_data',
-        data: newData,
-        updated_at: new Date().toISOString()
+      setAllEmployees(prev => {
+        const index = prev.findIndex(e => e.userId === userId);
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = { ...next[index], ...updatedEmp } as UserProfile;
+          return next;
+        }
+        return [updatedEmp as UserProfile, ...prev];
       });
-      if (error) throw error;
-      setBarData(newData);
-      setIsEditingBar(false);
+
+      if (viewedProfile.userId === userId) {
+        setViewedProfile(updatedEmp as UserProfile);
+      }
+      
+      if (profile.userId === userId) {
+        setProfileForm(updatedEmp as UserProfile);
+      }
+
+      setIsEditingEmployee(false);
+      setSelectedEmployee(null);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
     }
   };
 
-  const handleUpdateAreaData = async (newData: typeof areaData) => {
-    try {
-      const { error } = await supabase.from('dashboard_stats').upsert({
-        id: 'area_data',
-        data: newData,
-        updated_at: new Date().toISOString()
+  useEffect(() => {
+    if (viewedProfile?.userId) {
+      const fetchProfile = async () => {
+        try {
+          const docRef = doc(db, 'users', viewedProfile.userId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data() as UserProfile;
+            setViewedProfile(data);
+            if (data.careerHistory) setCareerHistory(data.careerHistory);
+            if (data.cutiData) setCutiData(data.cutiData);
+            // Also sync in allEmployees list
+            setAllEmployees(prev => prev.map(e => e.userId === data.userId ? data : e));
+          }
+        } catch (err) {
+          console.error("Error fetching viewed profile:", err);
+        }
+      };
+      
+      fetchProfile();
+
+      // Listen for leave entitlements
+      const q = query(
+        collection(db, 'leaveEntitlements'),
+        where('userId', '==', viewedProfile.userId)
+      );
+      
+      const unsubLeave = onSnapshot(q, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setLeaveEntitlements(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'leaveEntitlements');
       });
-      if (error) throw error;
-      setAreaData(newData);
-      setIsEditingArea(false);
-    } catch (err) {
-      console.error(err);
+
+      // Listen for attendance claims
+      const claimsPath = 'attendanceClaims';
+      let claimsQuery;
+      
+      if (isAdmin && showAllClaims) {
+        claimsQuery = query(collection(db, claimsPath), orderBy('createdAt', 'desc'));
+      } else {
+        claimsQuery = query(
+          collection(db, claimsPath),
+          where('userId', '==', viewedProfile.userId),
+          orderBy('createdAt', 'desc')
+        );
+      }
+
+      const unsubClaims = onSnapshot(claimsQuery, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+        setAttendanceClaims(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'attendanceClaims');
+      });
+
+      return () => {
+        unsubLeave();
+        unsubClaims();
+      };
     }
-  };
+  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
 
-  const handleSaveEmployeeLocal = async (emp: UserProfile) => {
-    await handleSaveEmployee(emp);
+  const handleDeleteEmployee = (userId: string) => {
+    setAllEmployees(prev => prev.filter(e => e.userId !== userId));
   };
-
+  
   // Search logic for Admin
   useEffect(() => {
     if (!isAdmin || searchQuery.length < 3) {
@@ -714,7 +581,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
         <div className="p-6">
           <button 
-            onClick={handleLogout}
+            onClick={() => auth.signOut()}
             className="flex w-full items-center gap-4 rounded-2xl px-6 py-4 text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 group"
           >
             <LogOut size={22} className="group-hover:-translate-x-1 transition-transform" />
@@ -821,43 +688,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
             data={selectedFaqItem?.item}
             onSave={handleSaveFaqItem}
           />
-
-          <Modal isOpen={isCreatingClaim} onClose={() => setIsCreatingClaim(false)} title="Buat Klaim Absensi">
-            <div className="space-y-6 text-left">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pengajuan koreksi absensi atau izin</p>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tanggal Absensi</label>
-                  <input 
-                    type="date"
-                    value={claimForm.date}
-                    onChange={e => setClaimForm({...claimForm, date: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-slate-900"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Alasan / Keterangan</label>
-                  <textarea 
-                    value={claimForm.reason}
-                    onChange={e => setClaimForm({...claimForm, reason: e.target.value})}
-                    placeholder="Contoh: Lupa Check-in, Sakit, atau Izin Penting"
-                    rows={3}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
-                  />
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  handleCreateClaim(claimForm.reason, claimForm.date);
-                  setIsCreatingClaim(false);
-                  setClaimForm({ reason: '', date: new Date().toISOString().split('T')[0] });
-                }}
-                className="w-full py-5 bg-indigo-600 text-white font-black text-sm uppercase tracking-widest rounded-3xl shadow-xl hover:bg-indigo-700 transition-all"
-              >
-                Kirim Pengajuan
-              </button>
-            </div>
-          </Modal>
 
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
@@ -1075,10 +905,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                           <UserPlus size={22} />
                           Tambah Karyawan
                         </button>
-                        <button 
-                          onClick={handleSeedData}
-                          className="flex items-center justify-center gap-4 w-full bg-white border border-slate-100 text-slate-400 font-black uppercase text-xs tracking-widest py-7 rounded-[36px] shadow-sm hover:text-indigo-600 hover:bg-indigo-50 hover:scale-[1.02] active:scale-95 transition-all"
-                        >
+                        <button className="flex items-center justify-center gap-4 w-full bg-white border border-slate-100 text-slate-400 font-black uppercase text-xs tracking-widest py-7 rounded-[36px] shadow-sm hover:text-indigo-600 hover:bg-indigo-50 hover:scale-[1.02] active:scale-95 transition-all">
                           <RotateCw size={20} />
                           Sinkronasi Database
                         </button>
@@ -1115,12 +942,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                                />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight truncate text-base">{emp.name}</h4>
-                                {emp.role === 'admin' && (
-                                  <span className="bg-blue-100 text-blue-600 text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter shrink-0 border border-blue-200">ADMIN</span>
-                                )}
-                              </div>
+                              <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight truncate text-base">{emp.name}</h4>
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{emp.unit || 'NO UNIT'} • {emp.position}</p>
                             </div>
                             {isAdmin && emp.email !== profile.email && (
@@ -1162,64 +984,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                     {/* Decorative Watermark */}
                     <div className="absolute top-1/2 -right-20 -translate-y-1/2 opacity-10 pointer-events-none">
                        <CheckCircle2 size={400} />
-                    </div>
-                  </div>
-
-                  {/* Attendance Card & Logs */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <AttendanceCard 
-                      status={attendance ? (attendance.check_out ? 'DONE' : 'CHECKED_IN') : 'READY'} 
-                      checkInTime={attendance?.check_in?.time}
-                      checkOutTime={attendance?.check_out?.time}
-                      onCheckIn={() => handleCheckIn({ lat: -6.2, lng: 106.8 }, 'Lazuardi Global Islamic School')}
-                      onCheckOut={() => handleCheckOut({ lat: -6.2, lng: 106.8 }, 'Lazuardi Global Islamic School')}
-                    />
-                    
-                    <div className="rounded-[40px] bg-white p-8 shadow-sm border border-slate-100 flex flex-col">
-                      <div className="flex items-center justify-between mb-8">
-                        <div>
-                          <h4 className="text-xl font-black text-slate-900 tracking-tight">LOG ABSENSI</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Aktivitas Terakhir</p>
-                        </div>
-                        <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300">
-                          <History size={18} />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-4 flex-1">
-                        {logs.slice(0, 4).map((log, i) => (
-                          <div key={i} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100/50">
-                            <div className="flex items-center gap-4">
-                              <div className={cn(
-                                "h-10 w-10 rounded-xl flex items-center justify-center",
-                                log.status === 'present' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
-                              )}>
-                                <CheckCircle2 size={18} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-slate-800">{formatDate(log.date)}</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                  {log.check_in?.time ? new Date(log.check_in.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'} - {log.check_out?.time ? new Date(log.check_out.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                </p>
-                              </div>
-                            </div>
-                            <span className={cn(
-                              "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                              log.status === 'present' ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"
-                            )}>
-                              {log.status.toUpperCase()}
-                            </span>
-                          </div>
-                        ))}
-                        {logs.length === 0 && (
-                          <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-8">
-                            <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
-                              <Calendar size={32} />
-                            </div>
-                            <p className="text-slate-400 text-xs font-semibold italic">Belum ada riwayat absensi</p>
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </div>
 
@@ -1467,55 +1231,40 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                 className="max-w-6xl mx-auto space-y-12"
               >
                 {/* Header Section */}
-                <div className="flex flex-col lg:flex-row gap-8">
-                  <div className="flex-1 rounded-[48px] bg-slate-900 p-10 lg:p-14 shadow-2xl text-white flex flex-col md:flex-row items-center gap-10 overflow-hidden relative group">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none" />
-                    <div className="h-24 w-24 rounded-[32px] bg-white/10 text-white flex items-center justify-center border border-white/20 backdrop-blur-md shadow-2xl shrink-0">
-                      <Award size={48} />
-                    </div>
-                    <div className="space-y-3 flex-1 text-center md:text-left relative z-10">
-                      <h3 className="text-3xl font-black tracking-tighter leading-none uppercase">Status Penghargaan Masa Bakti</h3>
-                      <p className="text-[11px] font-black uppercase tracking-[0.3em] text-blue-300 italic">LONG SERVICE LEAVE CYCLE STATUS</p>
-                      <div className="flex items-center gap-6 justify-center md:justify-start pt-4">
-                        <div className="space-y-2">
-                           <div className="h-2 w-48 bg-white/10 rounded-full overflow-hidden">
-                               <div 
-                                 className="h-full bg-blue-400 rounded-full shadow-sm transition-all duration-1000" 
-                                 style={{ width: `${Math.min((tenureYears / 30) * 100, 100)}%` }}
-                               />
-                           </div>
-                           <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest">Progress: {Math.round((tenureYears / 30) * 100)}% Menuju 30 Tahun</p>
-                        </div>
-                        <div className="h-12 w-px bg-white/10" />
-                        <div className="text-left">
-                           <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest leading-none">Masa Kerja</p>
-                           <p className="text-xl font-black text-white mt-1">{tenureYears} Tahun</p>
-                        </div>
-                      </div>
+                <div className="rounded-[48px] bg-slate-900 p-10 lg:p-14 shadow-2xl text-white flex flex-col md:flex-row items-center gap-10 overflow-hidden relative group">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none" />
+                  <div className="h-24 w-24 rounded-[32px] bg-white/10 text-white flex items-center justify-center border border-white/20 backdrop-blur-md shadow-2xl shrink-0">
+                    <Award size={48} />
+                  </div>
+                  <div className="space-y-3 flex-1 text-center md:text-left relative z-10">
+                    <h3 className="text-3xl font-black tracking-tighter leading-none uppercase">Status Penghargaan Masa Bakti</h3>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-blue-300 italic">LONG SERVICE LEAVE CYCLE STATUS</p>
+                    <div className="flex items-center gap-6 justify-center md:justify-start pt-4">
+                       <div className="space-y-2">
+                          <div className="h-2 w-48 bg-white/10 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-400 rounded-full shadow-sm transition-all duration-1000" 
+                                style={{ width: `${Math.min((tenureYears / 30) * 100, 100)}%` }}
+                              />
+                          </div>
+                          <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest">Progress: {Math.round((tenureYears / 30) * 100)}% Menuju 30 Tahun</p>
+                       </div>
+                       <div className="h-12 w-px bg-white/10" />
+                       <div className="text-left">
+                          <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest leading-none">Masa Kerja</p>
+                          <p className="text-xl font-black text-white mt-1">{tenureYears} Tahun</p>
+                       </div>
                     </div>
                   </div>
-
-                  <div className="w-full lg:w-80 rounded-[48px] bg-white border border-slate-100 p-10 flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16" />
-                    <div className="h-16 w-16 rounded-3xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6">
-                      <Calendar size={32} />
-                    </div>
-                    <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Sisa Cuti Tahunan</h4>
-                    <p className="text-6xl font-black text-slate-900 tracking-tighter">{(viewedProfile.cutiData as any)?.tahunan || 0}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-4">HARI TERSEDIA</p>
-                  </div>
-                </div>
-
-                {isAdmin && (
-                  <div className="flex justify-end">
+                  {isAdmin && (
                     <button 
                       onClick={() => setIsEditingCuti(true)}
-                      className="px-10 py-5 bg-white text-slate-900 border border-slate-100 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all relative z-10 group/btn"
+                      className="px-10 py-5 bg-white text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-2xl hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all relative z-10 group/btn"
                     >
                       Kelola Hak Cuti <ChevronRight size={14} className="inline-block ml-2 group-hover:translate-x-1 transition-transform" />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Cycle Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -1626,12 +1375,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                             {showAllClaims ? 'Lihat Klaim Saya' : 'Lihat Semua Klaim'}
                           </button>
                         )}
-                        <button 
-                          onClick={() => setIsCreatingClaim(true)}
+                        <a 
+                          href="https://forms.gle/BCQrSBzraHaw1tmJ6" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
                           className="flex items-center gap-3 px-10 py-5 bg-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all"
                         >
                           <Plus size={20} className="stroke-white stroke-[3]" /> Klaim Sekarang
-                        </button>
+                        </a>
                       </div>
                     </div>
                     
@@ -2281,26 +2032,15 @@ function EditCareerModal({ isOpen, onClose, data, onSave }: any) {
 
 function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
   const [lsCycles, setLsCycles] = useState<any[]>(data.longServiceLeave || []);
-  const [cutiTahunan, setCutiTahunan] = useState(data.cutiData?.tahunan || 12);
 
   useEffect(() => {
     setLsCycles(data.longServiceLeave || []);
-    setCutiTahunan(data.cutiData?.tahunan || 12);
   }, [data, isOpen]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Kelola Masa Milestone Cuti Besar">
       <div className="space-y-10 text-left">
         <div className="space-y-6">
-           <div className="flex items-center justify-between">
-              <h5 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em]">Sisa Cuti Tahunan</h5>
-              <div className="w-32">
-                <Input label="Jumlah Hari" value={cutiTahunan.toString()} onChange={(v) => setCutiTahunan(parseInt(v) || 0)} />
-              </div>
-           </div>
-           
-           <div className="h-px bg-slate-100" />
-
            <div className="flex items-center justify-between">
               <h5 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em]">Siklus Pengabdian (6 Tahunan)</h5>
               <button 
@@ -2359,8 +2099,7 @@ function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
         <button 
           onClick={() => { 
             onSave({ 
-              longServiceLeave: lsCycles,
-              tahunan: cutiTahunan
+              longServiceLeave: lsCycles
             }); 
             onClose(); 
           }} 
@@ -2653,73 +2392,11 @@ function EditFaqItemModal({ isOpen, onClose, categoryId, data, onSave }: any) {
             className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
           />
         </div>
-        <button onClick={() => onSave(form)} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl shadow-xl">
+        <button onClick={() => onSave(categoryId, form)} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl shadow-xl">
            SIMPAN ITEM
         </button>
       </div>
     </Modal>
-  );
-}
-
-function AttendanceCard({ status, checkInTime, checkOutTime, onCheckIn, onCheckOut }: { 
-  status: 'READY' | 'CHECKED_IN' | 'DONE', 
-  checkInTime?: string, 
-  checkOutTime?: string,
-  onCheckIn: () => void,
-  onCheckOut: () => void
-}) {
-  return (
-    <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 flex flex-col justify-between">
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-xl font-black text-slate-900 tracking-tight">PRESENSI HARI INI</h4>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Lazuardi Global Islamic School</p>
-          </div>
-          <div className={cn(
-            "h-12 w-12 rounded-2xl flex items-center justify-center",
-            status === 'READY' ? "bg-blue-50 text-blue-600" : status === 'CHECKED_IN' ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-400"
-          )}>
-            <Fingerprint size={24} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-6 bg-slate-50/50 rounded-3xl border border-slate-100/50">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Check In</p>
-            <p className="text-2xl font-black text-slate-900">{checkInTime ? new Date(checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
-          </div>
-          <div className="p-6 bg-slate-50/50 rounded-3xl border border-slate-100/50">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Check Out</p>
-            <p className="text-2xl font-black text-slate-900">{checkOutTime ? new Date(checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="pt-8">
-        {status === 'READY' && (
-          <button 
-            onClick={onCheckIn}
-            className="w-full py-5 bg-blue-600 text-white font-black text-sm uppercase tracking-widest rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-          >
-            <Clock size={20} /> Check In Sekarang
-          </button>
-        )}
-        {status === 'CHECKED_IN' && (
-          <button 
-            onClick={onCheckOut}
-            className="w-full py-5 bg-emerald-600 text-white font-black text-sm uppercase tracking-widest rounded-3xl shadow-xl shadow-emerald-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-          >
-            <LogOut size={20} /> Check Out Sekarang
-          </button>
-        )}
-        {status === 'DONE' && (
-          <div className="w-full py-5 bg-slate-100 text-slate-400 font-black text-sm uppercase tracking-widest rounded-3xl flex items-center justify-center gap-3">
-            <CheckCircle2 size={20} /> Selesai Hari Ini
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 

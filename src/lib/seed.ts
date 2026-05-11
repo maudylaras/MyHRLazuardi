@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { db } from './firebase';
+import { collection, doc, setDoc, getDocs, limit, query } from 'firebase/firestore';
 import { UserProfile } from '../types';
 
 const RAW_DATA = `1,10.00.001,"Lubna Assagaf, S.Pd",3276045510590004,Mizan,,,Kantor - Direktorat,Kabid. Pendidikan,Full Time,Tetap,01-Jul-00
@@ -8,9 +9,11 @@ const RAW_DATA = `1,10.00.001,"Lubna Assagaf, S.Pd",3276045510590004,Mizan,,,Kan
 158,10.25.818,"Maudy Larasati.,S.Psi.",3276105508020001,0002240707375,maudy@lazuardi.sch.id,3276105508020001,Lazuardi,Staf HRD,Full Time,K-II,06-Jan-25`;
 
 export async function seedEmployees() {
-  const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, limit(10)); // Check if we have more than a few users
+  const snap = await getDocs(q);
   
-  if (count && count > 10) {
+  if (snap.size > 10) {
     console.log("Employees already seeded");
   } else {
     const lines = RAW_DATA.split('\n');
@@ -21,26 +24,28 @@ export async function seedEmployees() {
       const name = parts[2].replace(/"/g, '');
       const email = parts[5] || `${parts[1]}@lazuardi.sch.id`;
       
-      const profileData = {
-        id: `mock_${parts[1]}`, // Synthetic ID for mock data
+      const profile: UserProfile = {
+        userId: `mock_${parts[1]}`,
         niy: parts[1],
         name: name,
         email: email,
         role: 'employee',
+        createdAt: new Date().toISOString(),
         position: parts[8],
         unit: parts[7],
-        contract_status: parts[9],
-        entry_date: parts[11] || parts[10],
+        contractStatus: parts[9],
+        entryDate: parts[11] || parts[10],
       };
 
-      await supabase.from('profiles').upsert(profileData);
+      await setDoc(doc(db, 'users', profile.userId), profile, { merge: true });
     }
     console.log("Employees seeding completed");
   }
 
   // Seed Regulations
-  const { data: regs } = await supabase.from('regulations').select('id').limit(1);
-  if (!regs || regs.length === 0) {
+  const regsRef = collection(db, 'regulations');
+  const regsSnap = await getDocs(query(regsRef, limit(1)));
+  if (regsSnap.empty) {
     const defaultRegs = [
       {
         id: 'attendance',
@@ -63,14 +68,15 @@ export async function seedEmployees() {
       }
     ];
     for (const reg of defaultRegs) {
-      await supabase.from('regulations').upsert(reg);
+      await setDoc(doc(db, 'regulations', reg.id), reg);
     }
     console.log("Regulations seeding completed");
   }
 
   // Seed FAQ
-  const { data: faqs } = await supabase.from('help_center_categories').select('id').limit(1);
-  if (!faqs || faqs.length === 0) {
+  const faqRef = collection(db, 'helpCenter');
+  const faqSnap = await getDocs(query(faqRef, limit(1)));
+  if (faqSnap.empty) {
     const defaultFaqs = [
       {
         id: 'general',
@@ -91,7 +97,7 @@ export async function seedEmployees() {
       }
     ];
     for (const faq of defaultFaqs) {
-      await supabase.from('help_center_categories').upsert(faq);
+      await setDoc(doc(db, 'helpCenter', faq.id), faq);
     }
     console.log("FAQ seeding completed");
   }

@@ -102,7 +102,7 @@ export interface AttendanceRecord {
   userId: string;
   date: string; // YYYY-MM-DD
   checkIn?: {
-    time: string; // ISO String
+    time: any; // Firestore Timestamp
     location: {
       lat: number;
       lng: number;
@@ -110,7 +110,7 @@ export interface AttendanceRecord {
     address?: string;
   };
   checkOut?: {
-    time: string; // ISO String
+    time: any; // Firestore Timestamp
     location: {
       lat: number;
       lng: number;
