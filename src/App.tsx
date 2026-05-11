@@ -61,12 +61,15 @@ export default function App() {
         throw idError;
       }
 
+      console.log('ID Lookup Result:', idData);
+
       if (idData) {
         setProfile(mapProfile(idData));
         return;
       }
 
-      // 2. Jalur Kedua: Cari berdasarkan Email (Untuk data yang baru di-impor tanpa ID)
+      // 2. Jalur Kedua: Cari berdasarkan Email
+      console.log('Searching for email:', supabaseUser.email);
       const { data: emailData, error: emailError } = await supabase
         .from('profiles')
         .select('*')
@@ -77,6 +80,8 @@ export default function App() {
         console.error('Database Error (Email Lookup):', emailError);
         throw emailError;
       }
+
+      console.log('Email Lookup Result:', emailData);
       
       if (emailData) {
         // SAMBUNGKAN: Update profil lama dengan ID baru
@@ -196,12 +201,11 @@ export default function App() {
               <p className="mt-2 text-slate-500 font-medium">Akun Anda ({user.email}) berhasil masuk, tetapi kami tidak dapat memuat data karyawan Anda.</p>
             </div>
             <div className="p-4 bg-slate-50 rounded-xl text-left">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Penyebab Kemungkinan:</p>
-              <ul className="text-xs text-slate-600 space-y-1 font-medium list-disc ml-4">
-                <li>Tabel "profiles" belum dibuat di Supabase SQL Editor.</li>
-                <li>RLS (Row Level Security) memblokir akses baca/tulis.</li>
-                <li>Struktur kolom tabel tidak sesuai dengan aplikasi.</li>
-              </ul>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Solusi (Jalankan di Supabase SQL Editor):</p>
+              <code className="block text-[10px] bg-slate-900 text-green-400 p-3 rounded-lg overflow-x-auto font-mono mb-3">
+                ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+              </code>
+              <p className="text-[10px] text-slate-500 font-medium italic">*RLS memblokir aplikasi untuk membaca data profil Anda.</p>
             </div>
             <div className="flex flex-col gap-2">
               <button 
