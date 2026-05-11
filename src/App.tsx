@@ -10,6 +10,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -38,6 +39,7 @@ export default function App() {
         setUser(null);
         setProfile(null);
         setLoading(false);
+        setDebugError(null);
       }
     });
 
@@ -48,64 +50,55 @@ export default function App() {
   }, []);
 
   const fetchProfile = async (supabaseUser: User) => {
+    setDebugError(null);
     try {
-      // 1. Jalur Utama: Cari berdasarkan ID Supabase (Paling Cepat)
+      const userEmail = supabaseUser.email?.toLowerCase().trim();
+
+      // 1. Jalur Utama: Cari berdasarkan ID Supabase
       const { data: idData, error: idError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
-      if (idError) {
-        console.error('Database Error (ID Lookup):', idError);
-        throw idError;
-      }
-
-      console.log('ID Lookup Result:', idData);
+      if (idError) throw idError;
 
       if (idData) {
         setProfile(mapProfile(idData));
         return;
       }
 
-      // 2. Jalur Kedua: Cari berdasarkan Email
-      console.log('Searching for email:', supabaseUser.email);
-      const { data: emailData, error: emailError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', supabaseUser.email)
-        .maybeSingle();
-      
-      if (emailError) {
-        console.error('Database Error (Email Lookup):', emailError);
-        throw emailError;
-      }
-
-      console.log('Email Lookup Result:', emailData);
-      
-      if (emailData) {
-        // SAMBUNGKAN: Update profil lama dengan ID baru
-        const { data: linkedData, error: linkError } = await supabase
+      // 2. Jalur Kedua: Cari berdasarkan Email (untuk data impor)
+      if (userEmail) {
+        const { data: emailData, error: emailError } = await supabase
           .from('profiles')
-          .update({ id: supabaseUser.id })
-          .eq('email', supabaseUser.email)
-          .select()
-          .single();
+          .select('*')
+          .eq('email', userEmail)
+          .maybeSingle();
         
-        if (linkError) {
-          console.error('Gagal menyambungkan ID ke email:', linkError);
-          throw linkError;
+        if (emailError) throw emailError;
+        
+        if (emailData) {
+          // SAMBUNGKAN: Update profil lama dengan ID baru
+          const { data: linkedData, error: linkError } = await supabase
+            .from('profiles')
+            .update({ id: supabaseUser.id })
+            .eq('email', userEmail)
+            .select()
+            .single();
+          
+          if (linkError) throw linkError;
+          setProfile(mapProfile(linkedData));
+          return;
         }
-        setProfile(mapProfile(linkedData));
-        return;
       }
 
-      // 3. Fallback: Create new profile
-      const isMaudy = supabaseUser.email === 'maudy@lazuardi.sch.id';
+      // 3. Fallback: Buat profil baru jika benar-benar tidak ada
+      const isMaudy = userEmail === 'maudy@lazuardi.sch.id';
       const newProfile = {
         id: supabaseUser.id,
-        name: isMaudy ? "Maudy Larasati.,S.Psi." : (supabaseUser.user_metadata.full_name || 'User'),
-        email: supabaseUser.email || '',
+        name: isMaudy ? "Maudy Larasati.,S.Psi." : (supabaseUser.user_metadata.full_name || 'User Baru'),
+        email: userEmail || '',
         role: isMaudy ? 'admin' : 'employee',
         photo_url: supabaseUser.user_metadata.avatar_url || '',
         niy: isMaudy ? "10.25.818" : "",
@@ -113,35 +106,29 @@ export default function App() {
         unit: isMaudy ? "Lazuardi" : "",
         position: isMaudy ? "Staf HRD" : "",
         contract_status: "Full Time",
-        entry_date: isMaudy ? "2025-01-06" : null,
-        gender: isMaudy ? "Pr." : "",
-        birth_place: isMaudy ? "Jakarta" : "",
-        birth_date: isMaudy ? "2002-08-15" : null,
-        education: "S1 Psikologi - Universitas Gunadarma",
-        phone: isMaudy ? "081218496052" : "",
       };
 
       const { data: insertedData, error: insertError } = await supabase
         .from('profiles')
         .insert([newProfile])
         .select()
-        .single();
+        .maybeSingle();
 
-      if (insertError) throw insertError;
-      setProfile(mapProfile(insertedData));
+      if (insertError) {
+        // Jika gagal insert (misal RLS aktif), kita simpan errornya
+        console.error('Insert Error:', insertError);
+        setDebugError(`Gagal membuat profil: ${insertError.message} (Code: ${insertError.code})`);
+      } else if (insertedData) {
+        setProfile(mapProfile(insertedData));
+      }
     } catch (error: any) {
       console.error('Profile Fetch Error:', error);
-      // Simpan error ke state jika perlu untuk ditampilkan di UI
-      if (error.code === '42P01') {
-        alert('Tabel "profiles" tidak ditemukan. Pastikan Anda sudah membuat tabel di Supabase SQL Editor.');
-      } else if (error.code === '23505') {
-        alert('Terjadi duplikasi data. Pastikan email bersifat unik di database.');
-      }
+      setDebugError(error.message || 'Terjadi kesalahan saat mengambil profil.');
     } finally {
-      // Logic for finalizing loading should be outside or handled with a flag
       setLoading(false);
     }
   };
+
 
   // Helper to map DB snake_case to Frontend camelCase
   const mapProfile = (dbData: any): UserProfile => ({
@@ -198,15 +185,30 @@ export default function App() {
             </div>
             <div>
               <h2 className="text-2xl font-black text-slate-900">Profil Tidak Ditemukan</h2>
-              <p className="mt-2 text-slate-500 font-medium">Akun Anda ({user.email}) berhasil masuk, tetapi kami tidak dapat memuat data karyawan Anda.</p>
+              <p className="mt-2 text-slate-500 font-medium">Akun Anda berhasil masuk, tetapi data karyawan tidak ditemukan di database.</p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl text-left">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Solusi (Jalankan di Supabase SQL Editor):</p>
-              <code className="block text-[10px] bg-slate-900 text-green-400 p-3 rounded-lg overflow-x-auto font-mono mb-3">
-                ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
-              </code>
-              <p className="text-[10px] text-slate-500 font-medium italic">*RLS memblokir aplikasi untuk membaca data profil Anda.</p>
+            
+            <div className="p-4 bg-slate-50 rounded-xl text-left space-y-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Login:</p>
+                <p className="text-sm font-bold text-slate-700">{user.email}</p>
+              </div>
+              
+              {debugError && (
+                <div className="pt-2 border-t border-slate-200">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400">Detail Kesalahan:</p>
+                  <p className="text-xs font-medium text-red-600 bg-red-50 p-2 rounded mt-1">{debugError}</p>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-200">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Solusi (Supabase SQL Editor):</p>
+                <code className="block text-[9px] bg-slate-900 text-green-400 p-2 rounded font-mono">
+                  ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+                </code>
+              </div>
             </div>
+
             <div className="flex flex-col gap-2">
               <button 
                 onClick={() => window.location.reload()}
@@ -218,7 +220,7 @@ export default function App() {
                 onClick={() => supabase.auth.signOut()}
                 className="w-full py-3 text-slate-500 font-bold hover:text-slate-700 transition-all"
               >
-                Kemuar & Ganti Akun
+                Keluar & Ganti Akun
               </button>
             </div>
           </div>
