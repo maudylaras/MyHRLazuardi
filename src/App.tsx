@@ -49,32 +49,37 @@ export default function App() {
 
   const fetchProfile = async (supabaseUser: User) => {
     try {
-      // 1. Optimized Path: Most users will have a profile linked to their UID.
-      // Fetching by ID is the fastest possible index look-up.
+      // 1. Jalur Utama: Cari berdasarkan ID Supabase (Paling Cepat)
       const { data: idData, error: idError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
-      if (idError) throw idError;
+      if (idError) {
+        console.error('Database Error (ID Lookup):', idError);
+        throw idError;
+      }
 
       if (idData) {
         setProfile(mapProfile(idData));
         return;
       }
 
-      // 2. Secondary Path: Check by email if ID not found (New login for existing record)
+      // 2. Jalur Kedua: Cari berdasarkan Email (Untuk data yang baru di-impor tanpa ID)
       const { data: emailData, error: emailError } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', supabaseUser.email)
         .maybeSingle();
       
-      if (emailError) throw emailError;
+      if (emailError) {
+        console.error('Database Error (Email Lookup):', emailError);
+        throw emailError;
+      }
       
       if (emailData) {
-        // Link and return
+        // SAMBUNGKAN: Update profil lama dengan ID baru
         const { data: linkedData, error: linkError } = await supabase
           .from('profiles')
           .update({ id: supabaseUser.id })
@@ -82,7 +87,10 @@ export default function App() {
           .select()
           .single();
         
-        if (linkError) throw linkError;
+        if (linkError) {
+          console.error('Gagal menyambungkan ID ke email:', linkError);
+          throw linkError;
+        }
         setProfile(mapProfile(linkedData));
         return;
       }
@@ -117,10 +125,12 @@ export default function App() {
       if (insertError) throw insertError;
       setProfile(mapProfile(insertedData));
     } catch (error: any) {
-      console.error('Error fetching profile:', error);
-      // If table doesn't exist or other DB error, we still want to show something or allow retry
+      console.error('Profile Fetch Error:', error);
+      // Simpan error ke state jika perlu untuk ditampilkan di UI
       if (error.code === '42P01') {
-        console.error('Tabel "profiles" belum dibuat di database Supabase Anda.');
+        alert('Tabel "profiles" tidak ditemukan. Pastikan Anda sudah membuat tabel di Supabase SQL Editor.');
+      } else if (error.code === '23505') {
+        alert('Terjadi duplikasi data. Pastikan email bersifat unik di database.');
       }
     } finally {
       // Logic for finalizing loading should be outside or handled with a flag
