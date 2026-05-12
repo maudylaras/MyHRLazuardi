@@ -73,76 +73,73 @@ service cloud.firestore {
              data.order is int;
     }
 
+    // Validation Blueprint: Certification
     function isValidCertification(data) {
-      return data.keys().hasAll(['id', 'userId', 'name', 'date', 'createdAt']) &&
-             data.id is string && data.id.size() <= 128 &&
-             data.userId == request.auth.uid &&
-             data.name is string && data.name.size() <= 200 &&
-             data.date is string && data.date.size() == 10 &&
-             data.createdAt is string &&
-             (data.get('photoUrl', null) == null || (data.photoUrl is string && data.photoUrl.size() <= 1200000));
+      return data.keys().hasAll(['certificationName', 'certificationDate', 'createdAt']) &&
+             data.certificationName is string && data.certificationName.size() <= 200 &&
+             data.certificationDate is string && data.certificationDate.size() <= 64 &&
+             (data.get('certificateFileUrl', null) == null || data.certificateFileUrl is string);
     }
 
-    // User Profiles
+    // Validation Blueprint: PersonalData
+    function isValidPersonalData(data) {
+      return data.keys().size() <= 40;
+    }
+
+    // Validation Blueprint: ContactData
+    function isValidContactData(data) {
+      return data.keys().hasAll(['namaKontak', 'hubungan', 'nomorHp']) &&
+             data.namaKontak is string &&
+             data.hubungan is string &&
+             data.nomorHp is string;
+    }
+
+    // Validation Blueprint: CareerHistory
+    function isValidCareerHistory(data) {
+      return data.keys().hasAll(['period', 'position', 'unit']) &&
+             data.period is string &&
+             data.position is string &&
+             data.unit is string;
+    }
+
+    // Validation Blueprint: AttendanceClaim
+    function isValidAttendanceClaim(data) {
+      return data.keys().hasAll(['reason', 'date', 'status']) &&
+             data.reason is string &&
+             data.date is string &&
+             data.status in ['pending', 'approved', 'rejected'];
+    }
+
+    // User Profiles & Sub-collections
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isAdmin();
-      allow create: if (isOwner(userId) && isValidUser(incoming()) && (incoming().role == 'employee' || incoming().email == 'maudy@lazuardi.sch.id')) || isAdmin();
-      allow update: if (isOwner(userId) || isAdmin()) && 
-                    (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoUrl', 'position', 'department', 'address', 'phone']));
-    }
+      allow create: if (isOwner(userId) && isValidUser(incoming())) || isAdmin();
+      allow update: if (isOwner(userId) || isAdmin());
 
-    // Certifications
-    match /certifications/{certId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && isValidCertification(incoming());
-      allow update: if isSignedIn() && isValidCertification(incoming()) && incoming().userId == existing().userId;
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      match /{allSubcollections=**} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Regulations
     match /regulations/{categoryId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidRegulationCategory(incoming());
+      allow write: if isAdmin();
     }
 
     // Help Center
     match /helpCenter/{categoryId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidFaqCategory(incoming());
-    }
-
-    // Career History
-    match /careerHistory/{historyId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow write: if isAdmin();
-    }
-
-    // Leave Entitlements
-    match /leaveEntitlements/{leaveId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
-    }
-
-    // Attendance Claims
-    match /attendanceClaims/{claimId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isAdmin();
     }
 
     // Attendance Records
     match /attendance/{attendanceId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && isValidAttendance(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isValidAttendance(incoming()) && 
-                    incoming().userId == existing().userId &&
-                    (
-                      // Action: Check Out
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['checkOut', 'notes'])) ||
-                      isAdmin()
-                    );
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
     }
     
     // Admins Collection (Read-only for rules)

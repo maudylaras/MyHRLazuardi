@@ -1,7 +1,20 @@
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { UserProfile, AttendanceRecord, CareerHistory, LeaveEntitlement, AttendanceClaim, RegulationCategory, FaqCategory, RegulationItem, FaqItem, Certification } from '../types';
-import { signOutUser, auth } from '../lib/firebase';
+import { UserProfile, AttendanceRecord, CareerHistory, LeaveEntitlement, AttendanceClaim, RegulationCategory, FaqCategory, RegulationItem, FaqItem, Certification, PersonalData, ContactData } from '../types';
+import { signOutUser, auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  serverTimestamp 
+} from 'firebase/firestore';
 import { ALL_EMPLOYEES } from '../data/employees';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -124,6 +137,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [regulationCategories, setRegulationCategories] = useState<RegulationCategory[]>([]);
   const [faqCategories, setFaqCategories] = useState<FaqCategory[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
+  const [personalData, setPersonalData] = useState<PersonalData | null>(null);
+  const [contactData, setContactData] = useState<ContactData[]>([]);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<ContactData | null>(null);
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [isAddingClaim, setIsAddingClaim] = useState(false);
+  const [isAddingCertification, setIsAddingCertification] = useState(false);
   const [isEditingRegCategory, setIsEditingRegCategory] = useState(false);
   const [isEditingRegItem, setIsEditingRegItem] = useState(false);
   const [isEditingFaqCategory, setIsEditingFaqCategory] = useState(false);
@@ -141,9 +161,51 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    // Firestore listeners disabled as per requirement "Do NOT use Firestore yet"
-    return () => {};
-  }, []);
+    if (!viewedProfile?.userId) return;
+
+    const uid = viewedProfile.userId;
+
+    // Personal Data Listener
+    const unsubPersonal = onSnapshot(collection(db, 'users', uid, 'personalData'), (snap) => {
+      if (!snap.empty) {
+        setPersonalData({ id: snap.docs[0].id, ...snap.docs[0].data() } as PersonalData);
+      } else {
+        setPersonalData(null);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/personalData`));
+
+    // Contact Data Listener
+    const unsubContact = onSnapshot(collection(db, 'users', uid, 'contactData'), (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ContactData[];
+      setContactData(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/contactData`));
+
+    // Career History Listener
+    const unsubCareer = onSnapshot(query(collection(db, 'users', uid, 'careerHistory'), orderBy('createdAt', 'desc')), (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CareerHistory[];
+      setCareerHistory(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/careerHistory`));
+
+    // Certifications Listener
+    const unsubCert = onSnapshot(query(collection(db, 'users', uid, 'certifications'), orderBy('createdAt', 'desc')), (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Certification[];
+      setCertifications(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/certifications`));
+
+    // Attendance Claims Listener
+    const unsubClaims = onSnapshot(query(collection(db, 'users', uid, 'attendanceClaims'), orderBy('createdAt', 'desc')), (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AttendanceClaim[];
+      setAttendanceClaims(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${uid}/attendanceClaims`));
+
+    return () => {
+      unsubPersonal();
+      unsubContact();
+      unsubCareer();
+      unsubCert();
+      unsubClaims();
+    };
+  }, [viewedProfile?.userId]);
 
 const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
     setIsEditingRegCategory(false);
@@ -177,79 +239,122 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
     if (!confirm('Hapus item FAQ?')) return;
   };
 
+  const handleSavePersonalData = async (data: Partial<PersonalData>) => {
+    try {
+      const uid = viewedProfile.userId;
+      const colRef = collection(db, 'users', uid, 'personalData');
+      if (data.id) {
+        const docRef = doc(db, 'users', uid, 'personalData', data.id);
+        await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(colRef, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+      setIsEditingPersonal(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'personalData');
+    }
+  };
+
+  const handleSaveContactData = async (data: Partial<ContactData>) => {
+    try {
+      const uid = viewedProfile.userId;
+      const colRef = collection(db, 'users', uid, 'contactData');
+      if (data.id) {
+        const docRef = doc(db, 'users', uid, 'contactData', data.id);
+        await updateDoc(docRef, { ...data, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(colRef, { ...data, updatedAt: serverTimestamp() });
+      }
+      setIsEditingContact(false);
+      setSelectedContact(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'contactData');
+    }
+  };
+
+  const handleSaveCareer = async (item: Partial<CareerHistory>) => {
+    try {
+      const uid = viewedProfile.userId;
+      const colRef = collection(db, 'users', uid, 'careerHistory');
+      if (item.id) {
+        const docRef = doc(db, 'users', uid, 'careerHistory', item.id);
+        await updateDoc(docRef, item);
+      } else {
+        await addDoc(colRef, { ...item, createdAt: serverTimestamp() });
+      }
+      setIsEditingCareer(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'careerHistory');
+    }
+  };
+
+  const handleSaveAttendanceClaim = async (claim: Partial<AttendanceClaim>) => {
+    try {
+      const uid = viewedProfile.userId;
+      const colRef = collection(db, 'users', uid, 'attendanceClaims');
+      await addDoc(colRef, { ...claim, createdAt: serverTimestamp() });
+      setIsAddingClaim(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'attendanceClaims');
+    }
+  };
+
   const handleSaveCertification = async (cert: Partial<Certification>) => {
-    setIsEditingCertification(false);
+    try {
+      const uid = viewedProfile.userId;
+      const colRef = collection(db, 'users', uid, 'certifications');
+      if (cert.id) {
+        const docRef = doc(db, 'users', uid, 'certifications', cert.id);
+        await updateDoc(docRef, cert);
+      } else {
+        await addDoc(colRef, { ...cert, createdAt: serverTimestamp() });
+      }
+      setIsEditingCertification(false);
+      setIsAddingCertification(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'certifications');
+    }
   };
-
-  const handleDeleteCertification = async (id: string) => {
-    if (!confirm('Hapus sertifikasi ini?')) return;
-  };
-
-  const sortedCareerHistory = useMemo(() => {
-    const history = viewedProfile.careerHistory || careerHistory;
-    if (careerSort === 'manual') return history;
-    
-    return [...history].sort((a, b) => {
-      const yearA = parseInt(a.period.substring(0, 4)) || 0;
-      const yearB = parseInt(b.period.substring(0, 4)) || 0;
-      return careerSort === 'newest' ? yearB - yearA : yearA - yearB;
-    });
-  }, [viewedProfile.careerHistory, careerHistory, careerSort]);
 
   const tenureYears = useMemo(() => {
     if (!viewedProfile.entryDate) return 0;
-    const entryDate = new Date(viewedProfile.entryDate);
+    const entry = new Date(viewedProfile.entryDate);
     const now = new Date();
-    let years = now.getFullYear() - entryDate.getFullYear();
-    const m = now.getMonth() - entryDate.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < entryDate.getDate())) {
+    let years = now.getFullYear() - entry.getFullYear();
+    const m = now.getMonth() - entry.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < entry.getDate())) {
       years--;
     }
-    return years;
+    return Math.max(0, years);
   }, [viewedProfile.entryDate]);
 
+  const handleSaveEmployee = async (emp: Partial<UserProfile>) => {
+    try {
+      if (!emp.userId) return;
+      const userRef = doc(db, 'users', emp.userId);
+      await setDoc(userRef, { ...emp, updatedAt: serverTimestamp() }, { merge: true });
+      setIsEditingEmployee(false);
+      setSelectedEmployee(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
+  };
+
+  const handleUpdateBarData = (newData: any) => setBarData(newData);
+  const handleUpdateAreaData = (newData: any) => setAreaData(newData);
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsEditingProfile(false);
+    await handleSaveEmployee(profileForm);
   };
-
-  const handleSaveCareer = async (newHistory: CareerHistory[]) => {
-    setCareerHistory(newHistory);
-    setIsEditingCareer(false);
+  const handleSaveCuti = async (data: any) => {
+    try {
+      const userRef = doc(db, 'users', viewedProfile.userId);
+      await updateDoc(userRef, data);
+      setIsEditingCuti(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
   };
-
-  const handleSaveCuti = async (newData: any) => {
-    const { longServiceLeave, ...restCutiData } = newData;
-    setCutiData(restCutiData);
-    setIsEditingCuti(false);
-  };
-
-  const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected') => {
-    // Disabled logic
-  };
-
-  const handleSeedData = async () => {
-    alert("Seeding data disabled.");
-  };
-
-  const handleUpdateBarData = (newData: typeof barData) => {
-    setBarData(newData);
-    setIsEditingBar(false);
-  };
-
-  const handleUpdateAreaData = (newData: typeof areaData) => {
-    setAreaData(newData);
-    setIsEditingArea(false);
-  };
-
-  const handleSaveEmployee = async (emp: UserProfile) => {
-    setIsEditingEmployee(false);
-    setSelectedEmployee(null);
-  };
-
-  useEffect(() => {
-    // Firestore fetching disabled as per requirement "Do NOT use Firestore yet"
-  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
 
   const handleDeleteEmployee = (userId: string) => {
     setAllEmployees(prev => prev.filter(e => e.userId !== userId));
@@ -438,10 +543,30 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
           />
 
           <EditCertificationModal
-            isOpen={isEditingCertification}
-            onClose={() => setIsEditingCertification(false)}
+            isOpen={isEditingCertification || isAddingCertification}
+            onClose={() => { setIsEditingCertification(false); setIsAddingCertification(false); setSelectedCertification(null); }}
             data={selectedCertification}
             onSave={handleSaveCertification}
+          />
+
+          <EditPersonalDataModal
+            isOpen={isEditingPersonal}
+            onClose={() => setIsEditingPersonal(false)}
+            data={personalData}
+            onSave={handleSavePersonalData}
+          />
+
+          <EditContactDataModal
+            isOpen={isEditingContact}
+            onClose={() => { setIsEditingContact(false); setSelectedContact(null); }}
+            data={selectedContact}
+            onSave={handleSaveContactData}
+          />
+
+          <AddAttendanceClaimModal
+            isOpen={isAddingClaim}
+            onClose={() => setIsAddingClaim(false)}
+            onSave={handleSaveAttendanceClaim}
           />
 
           <AnimatePresence mode="wait">
@@ -782,123 +907,133 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
                 {/* Profile Header Card */}
                 <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 flex flex-col items-center md:flex-row md:items-center gap-10">
                   <div className="h-36 w-36 rounded-[48px] bg-slate-50 flex items-center justify-center border-4 border-white shadow-xl ring-1 ring-slate-100 overflow-hidden shrink-0">
-                    <UserIcon size={64} className="text-slate-200" />
+                    <img 
+                      src={viewedProfile.photoUrl || `https://ui-avatars.com/api/?name=${viewedProfile.name}&background=2563eb&color=fff`} 
+                      className="h-full w-full object-cover" 
+                      referrerPolicy="no-referrer"
+                    />
                   </div>
-                  <div className="space-y-4 text-center md:text-left">
-                    <div className="flex items-center justify-center md:justify-start gap-4">
+                  <div className="space-y-4 text-center md:text-left flex-1">
+                    <div className="flex flex-col md:flex-row md:items-center gap-4">
                       <h3 className="text-4xl font-black text-slate-900 tracking-tighter leading-none">{viewedProfile.name}</h3>
-                      <div className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-400 flex items-center justify-center">
-                        <Briefcase size={18} />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {viewedProfile.userId !== profile.userId && (
-                          <button 
-                            onClick={() => setViewedProfile(profile)}
-                            className="px-3 py-1 bg-amber-50 text-amber-600 text-[9px] font-black uppercase rounded-lg hover:bg-amber-100 transition-all"
-                          >
-                            Kembali Ke Profil Saya
-                          </button>
-                        )}
-                        {(isAdmin || viewedProfile.userId === profile.userId) && (
-                          <button 
-                            onClick={() => {
-                              setSelectedEmployee(viewedProfile);
-                              setIsEditingEmployee(true);
-                            }}
-                            className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase rounded-lg hover:bg-indigo-100 transition-all"
-                          >
-                            Edit Data
-                          </button>
-                        )}
+                      <div className="flex gap-2 justify-center md:justify-start">
+                        <div className="px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-black uppercase rounded-lg border border-blue-100">
+                          {personalData?.aksesLevel || viewedProfile.role}
+                        </div>
                       </div>
                     </div>
-                    <p className="text-sm font-black text-indigo-600 uppercase tracking-[0.2em]">{viewedProfile.position || 'STAF HRD'}</p>
-                    <div className="flex items-center justify-center md:justify-start gap-3">
-                      <div className="px-4 py-1.5 bg-slate-100 rounded-xl text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        NIY: {viewedProfile.niy || '-'}
-                      </div>
-                      <div className="px-4 py-1.5 bg-indigo-50 rounded-xl text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
-                        {viewedProfile.unit || 'UNIT BELUM SET'}
-                      </div>
+                    <p className="text-slate-400 font-bold italic">{personalData?.jabatan || viewedProfile.position || 'Staf HRD'} • {personalData?.unit || viewedProfile.unit || 'Lazuardi'}</p>
+                    
+                    <div className="flex flex-wrap gap-3 pt-2 justify-center md:justify-start">
+                      <button 
+                        id="edit-personal-btn"
+                        onClick={() => setIsEditingPersonal(true)}
+                        className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/10"
+                      >
+                        <Edit3 size={14} /> Edit Data
+                      </button>
+                      <button 
+                         id="edit-contact-btn"
+                        onClick={() => { setSelectedContact(null); setIsEditingContact(true); }}
+                        className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all"
+                      >
+                        <Phone size={14} /> Tambah Kontak
+                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  {/* Personal Info Column */}
-                  <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 space-y-8 text-left">
-                    <h5 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em] border-b border-slate-100 pb-4">Informasi Personal</h5>
-                    <div className="space-y-5">
-                      <ProfileRow label="Email Official" value={viewedProfile.email} />
-                      <ProfileRow label="Telepon" value={viewedProfile.phone} />
-                      <ProfileRow label="NIK (KTP)" value={viewedProfile.nik} />
-                      <ProfileRow label="Pendidikan" value={viewedProfile.educationLevel ? `${viewedProfile.educationLevel} - ${viewedProfile.education || ''}` : viewedProfile.education} />
-                      <ProfileRow label="Tempat, Tgl Lahir" value={viewedProfile.birthPlace && viewedProfile.birthDate ? `${viewedProfile.birthPlace}, ${viewedProfile.birthDate}` : '-'} />
+                {/* Personal Information Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Column 1: Identity */}
+                  <div className="rounded-[36px] bg-white p-8 shadow-sm border border-slate-100 space-y-6">
+                    <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                      <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <Fingerprint size={20} />
+                      </div>
+                      <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">Identitas Diri</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <DetailRow label="Nama Lengkap" value={personalData?.namaLengkap || viewedProfile.name} />
+                      <DetailRow label="NIY / Pegawai ID" value={personalData?.niy} />
+                      <DetailRow label="NIK (KTP)" value={personalData?.nik} />
+                      <DetailRow label="NPWP" value={personalData?.npwp} />
+                      <DetailRow label="Gender" value={personalData?.gender} />
+                      <DetailRow label="Status Kawin" value={personalData?.statusKawin} />
+                      <DetailRow label="Tempat Lahir" value={personalData?.tempatLahir} />
+                      <DetailRow label="Tanggal Lahir" value={personalData?.tanggalLahir} />
                     </div>
                   </div>
 
-                  {/* Employment Info Column */}
-                  <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 space-y-8 text-left">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                      <h5 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em]">Kepegawaian</h5>
-                    </div>
-                    <div className="space-y-5">
-                      <ProfileRow label="Unit" value={viewedProfile.unit} />
-                      <ProfileRow label="Status Kontrak" value={viewedProfile.contractStatus || 'PKWT'} />
-                      <ProfileRow label="Masa Kerja" value={viewedProfile.entryDate} />
-                      <ProfileRow label="Status Kawin" value={viewedProfile.maritalStatus || 'TK'} />
-                      <ProfileRow label="BPJS" value={viewedProfile.bpjs || '-'} />
-                      <div className="flex items-center justify-between pt-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">IDP Plan</p>
-                        <a 
-                          href={viewedProfile.idpLink || '#'} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className={cn(
-                            "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm",
-                            viewedProfile.idpLink ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100" : "bg-slate-50 text-slate-300 cursor-not-allowed"
-                          )}
-                        >
-                          Lihat Plan <ExternalLink size={12} />
-                        </a>
+                  {/* Column 2: Employment */}
+                  <div className="rounded-[36px] bg-white p-8 shadow-sm border border-slate-100 space-y-6">
+                    <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                      <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <Briefcase size={20} />
                       </div>
+                      <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">Kepegawaian</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <DetailRow label="Jabatan" value={personalData?.jabatan} />
+                      <DetailRow label="Unit" value={personalData?.unit} />
+                      <DetailRow label="Email Official" value={personalData?.emailOfficial} />
+                      <DetailRow label="Status Kontrak" value={personalData?.statusKontrak} />
+                      <DetailRow label="Tanggal Masuk" value={personalData?.tanggalMasuk} />
                     </div>
                   </div>
-                </div>
 
-                {/* Emergency Contact Section */}
-                <div className="rounded-[48px] bg-white p-12 shadow-sm border border-slate-100 space-y-10 text-left">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-2xl font-black text-slate-900 tracking-tight">Kontak Darurat</h4>
-                    {(isAdmin || viewedProfile.userId === profile.userId) && (
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={async () => {
-                            if (window.confirm("Hapus kontak darurat ini?")) {
-                              const updatedProfile = { ...viewedProfile, emergencyContact: { name: '', relationship: '', phone: '' } };
-                              await handleSaveEmployee(updatedProfile);
-                            }
-                          }}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all"
-                        >
-                          <Trash2 size={12} /> Hapus
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setSelectedEmployee(viewedProfile);
-                            setIsEditingEmployee(true);
-                          }}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all"
-                        >
-                          Edit Kontak
-                        </button>
+                  {/* Education & Other */}
+                  <div className="rounded-[36px] bg-white p-8 shadow-sm border border-slate-100 space-y-6">
+                    <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                      <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <GraduationCap size={20} />
                       </div>
-                    )}
+                      <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">Pendidikan & Lainnya</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <DetailRow label="Tingkat Pendidikan" value={personalData?.tingkatPendidikan} />
+                      <DetailRow label="Institusi/Jurusan" value={personalData?.institusiJurusan} />
+                      <DetailRow label="BPJS Nomor" value={personalData?.bpjsNomor} />
+                      <DetailRow label="Telepon" value={personalData?.telepon} />
+                      <DetailRow label="Alamat" value={personalData?.alamatLengkap} />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <EmergencyCard label="Nama" value={viewedProfile.emergencyContact?.name || '-'} />
-                    <EmergencyCard label="Hubungan" value={viewedProfile.emergencyContact?.relationship || '-'} />
-                    <EmergencyCard label="Nomor HP" value={viewedProfile.emergencyContact?.phone || '-'} />
+
+                  {/* Emergency Contacts */}
+                  <div className="rounded-[36px] bg-white p-8 shadow-sm border border-slate-100 space-y-6">
+                    <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                      <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                        <Phone size={20} />
+                      </div>
+                      <h4 className="text-sm font-black uppercase tracking-widest text-slate-900">Kontak Darurat</h4>
+                    </div>
+                    <div className="space-y-4">
+                      {contactData.length === 0 ? (
+                        <div className="py-10 text-center text-slate-400 italic text-xs font-bold">
+                          Belum ada kontak darurat
+                        </div>
+                      ) : (
+                        contactData.map((c, i) => (
+                          <div key={c.id || i} className="group flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-red-50 transition-colors">
+                            <div className="space-y-1">
+                              <p className="text-xs font-black text-slate-900">{c.namaKontak}</p>
+                              <p className="text-[10px] font-bold text-slate-400 flex items-center gap-2 italic uppercase">
+                                {c.hubungan} {c.emergencyContact && <span className="text-red-500 font-bold">• Darurat</span>}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-bold text-slate-600">{c.nomorHp}</p>
+                              <button 
+                                onClick={() => { setSelectedContact(c); setIsEditingContact(true); }}
+                                className="text-[9px] font-black text-blue-600 uppercase mt-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -909,70 +1044,49 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
                 key="karir"
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="max-w-3xl mx-auto space-y-8"
+                className="max-w-4xl mx-auto space-y-10"
               >
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="h-14 w-14 flex items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-sm">
-                    <Trophy size={32} />
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Progress Karir</h3>
+                    <p className="text-xs font-bold text-slate-400 italic">Riwayat perjalanan jabatan dan unit kerja Anda</p>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-bold text-slate-900">Progress Karir</h3>
-                    <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Riwayat Jabatan & Pencapaian</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
-                        <button 
-                          onClick={() => setCareerSort('newest')}
-                          className={cn(
-                            "px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all",
-                            careerSort === 'newest' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                          )}
-                        >
-                          Newest
-                        </button>
-                        <button 
-                          onClick={() => setCareerSort('oldest')}
-                          className={cn(
-                            "px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all",
-                            careerSort === 'oldest' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                          )}
-                        >
-                          Oldest
-                        </button>
-                        <button 
-                          onClick={() => setCareerSort('manual')}
-                          className={cn(
-                            "px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all",
-                            careerSort === 'manual' ? "bg-white text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                          )}
-                        >
-                          Manual
-                        </button>
-                      </div>
-                    {(isAdmin || viewedProfile.userId === profile.userId) && (
-                      <button 
-                        onClick={() => setIsEditingCareer(true)}
-                        className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold"
-                      >
-                        <Edit3 size={18} />
-                      </button>
-                    )}
-                  </div>
+                  <button 
+                    onClick={() => setIsEditingCareer(true)}
+                    className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <Plus size={18} /> Edit Riwayat Karir
+                  </button>
                 </div>
 
-                <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 relative overflow-hidden">
-                  <div className="absolute left-[59px] top-20 bottom-20 w-0.5 bg-slate-100" />
-                  <div className="space-y-12 text-left">
-                    {sortedCareerHistory.map((item, index) => (
+                <div className="relative space-y-8 pl-8">
+                  {/* Timeline Line */}
+                  <div className="absolute left-12 top-4 bottom-4 w-1 bg-slate-100 rounded-full" />
+                  
+                  {careerHistory.length === 0 ? (
+                    <div className="rounded-[40px] bg-white p-20 text-center border-2 border-dashed border-slate-100 shadow-sm">
+                      <div className="h-20 w-20 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-300 mx-auto mb-6">
+                        <Briefcase size={40} />
+                      </div>
+                      <p className="text-slate-400 font-bold text-lg">Belum ada riwayat karir yang tercatat</p>
+                      <button 
+                        onClick={() => setIsEditingCareer(true)}
+                        className="mt-6 text-blue-600 font-black text-xs uppercase tracking-widest hover:underline"
+                      >
+                        Mulai Tambah Riwayat +
+                      </button>
+                    </div>
+                  ) : (
+                    careerHistory.map((item, i) => (
                       <CareerItem 
-                        key={index}
-                        period={item.period} 
-                        position={item.position} 
-                        unit={item.unit} 
-                        active={item.active} 
+                        key={item.id || i}
+                        period={item.period}
+                        position={item.position}
+                        unit={item.unit}
+                        active={i === 0}
                       />
-                    ))}
-                  </div>
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1102,138 +1216,58 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
 
 
             {activeTab === 'klaim' && (
-               <motion.div
+              <motion.div
                 key="klaim"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-6xl mx-auto space-y-10"
-               >
-                 <div className="rounded-[48px] bg-white p-12 shadow-sm border border-slate-100">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-12">
-                      <div className="space-y-2 text-center md:text-left">
-                        <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Data Klaim Absensi</h3>
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-500 italic">
-                          {isAdmin && showAllClaims ? 'SEMUA PENGAJUAN KARYAWAN' : `STATUS REAL-TIME PENGAJUAN: ${viewedProfile.email}`}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-4">
-                        {isAdmin && (
-                          <button
-                            onClick={() => setShowAllClaims(!showAllClaims)}
-                            className={cn(
-                              "px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
-                              showAllClaims 
-                                ? "bg-slate-900 text-white shadow-xl" 
-                                : "bg-white text-slate-600 border border-slate-100"
-                            )}
-                          >
-                            {showAllClaims ? 'Lihat Klaim Saya' : 'Lihat Semua Klaim'}
-                          </button>
-                        )}
-                        <a 
-                          href="https://forms.gle/BCQrSBzraHaw1tmJ6" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-10 py-5 bg-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all"
-                        >
-                          <Plus size={20} className="stroke-white stroke-[3]" /> Klaim Sekarang
-                        </a>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col items-center justify-center py-16 bg-slate-50/50 rounded-[48px] border-2 border-dashed border-slate-200 group hover:border-indigo-200 transition-colors">
-                       <div className="h-16 w-16 flex items-center justify-center rounded-3xl bg-white text-slate-300 shadow-sm mb-4 group-hover:scale-110 group-hover:text-blue-400 transition-all">
-                        <History size={32} className="text-blue-500" />
-                       </div>
-                       
-                       <div className="space-y-6 w-full max-w-4xl px-6 md:px-12">
-                          <h4 className="text-center text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8">
-                            {attendanceClaims.length > 0 ? 'Daftar Pengajuan' : 'Belum Ada Pengajuan'}
-                          </h4>
-                          
-                          <div className="grid grid-cols-1 gap-4">
-                            {attendanceClaims.length > 0 ? (
-                              attendanceClaims.map((claim) => (
-                                <div key={claim.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-3xl shadow-sm border border-slate-50 group/item hover:shadow-lg transition-all gap-4">
-                                  <div className="flex items-center gap-5">
-                                    <div className={cn(
-                                      "h-3 w-3 rounded-full animate-pulse",
-                                      claim.status === 'pending' ? "bg-amber-500" : 
-                                      claim.status === 'approved' ? "bg-emerald-500" : "bg-rose-500"
-                                    )} />
-                                    <div>
-                                      <p className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                                        {isAdmin && showAllClaims ? `${claim.userName} - ` : ''}{claim.reason}
-                                      </p>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                                        Tanggal Absensi: {formatDate(claim.date)} | Diajukan: {formatDate(claim.createdAt)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between md:justify-end gap-4">
-                                    <div className={cn(
-                                      "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg",
-                                      claim.status === 'pending' ? "bg-amber-500" : 
-                                      claim.status === 'approved' ? "bg-emerald-500" : "bg-rose-500"
-                                    )}>
-                                      {claim.status.toUpperCase()}
-                                    </div>
-                                    {isAdmin && claim.status === 'pending' && (
-                                      <div className="flex items-center gap-2">
-                                        <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'approved')}
-                                          className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
-                                          title="Setujui"
-                                        >
-                                          <ShieldCheck size={18} />
-                                        </button>
-                                        <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'rejected')}
-                                          className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
-                                          title="Tolak"
-                                        >
-                                          <ShieldAlert size={18} />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-10">
-                                <p className="text-slate-400 text-sm font-medium italic">Tidak ada data klaim yang ditemukan.</p>
-                              </div>
-                            )}
-                          </div>
-                          
-                          <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest px-10">
-                            Data ditarik otomatis berdasarkan {isAdmin && showAllClaims ? 'Sistem' : `Email: ${viewedProfile.email}`}
-                          </p>
-                       </div>
-                       
-                       {isAdmin && (
-                        <a 
-                          href="https://docs.google.com/spreadsheets/d/1yjKBEsNaHdRPslq5Ml_QZ2e2LQOMgxURXtJhJt-RD98/edit?gid=52916422#gid=52916422" 
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-12 flex items-center gap-3 px-8 py-4 bg-white border border-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:shadow-lg transition-all"
-                        >
-                          Kelola Entry Spreadsheet (ADMIN) <ExternalLink size={16} />
-                        </a>
-                       )}
-                    </div>
-                 </div>
+                className="max-w-5xl mx-auto space-y-10"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1 text-left">
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Klaim Absensi</h3>
+                    <p className="text-xs font-bold text-slate-400 italic">Ajukan klaim ketidakhadiran melalui portal resmi</p>
+                  </div>
+                  <button 
+                    onClick={() => setIsAddingClaim(true)}
+                    className="flex items-center gap-3 px-10 py-5 bg-blue-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest shadow-2xl shadow-blue-500/30 hover:scale-[1.02] active:scale-95 transition-all group"
+                  >
+                    KLAIM SEKARANG 
+                    <ExternalLink size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                  </button>
+                </div>
 
-                 <div className="rounded-[48px] bg-slate-900 p-12 lg:p-16 text-white shadow-2xl overflow-hidden relative">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] -mr-48 -mt-48" />
-                    <div className="relative space-y-8">
-                      <div className="space-y-4">
-                        <h4 className="text-3xl font-black tracking-tighter uppercase leading-none">Prosedur Klaim Absensi</h4>
-                        <p className="text-indigo-100/60 font-medium max-w-2xl leading-relaxed italic">Semua klaim ditarik langsung dari sistem Form Responses Lazuardi. Pastikan berkas pendukung telah disetujui Kepala Unit.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {attendanceClaims.length === 0 ? (
+                    <div className="md:col-span-2 rounded-[40px] bg-white p-20 text-center border-2 border-dashed border-slate-100 shadow-sm">
+                      <div className="h-20 w-20 bg-blue-50 rounded-3xl flex items-center justify-center text-blue-300 mx-auto mb-6">
+                        <Fingerprint size={40} />
                       </div>
+                      <p className="text-slate-400 font-bold text-lg">Anda belum pernah mengajukan klaim absen</p>
                     </div>
-                 </div>
-               </motion.div>
+                  ) : (
+                    attendanceClaims.map((claim, i) => (
+                      <div key={claim.id || i} className="group rounded-[40px] bg-white p-10 shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-blue-500/5 transition-all relative overflow-hidden">
+                        <div className="absolute top-0 right-0 h-24 w-24 bg-blue-50 rounded-bl-full flex items-center justify-center pl-6 pb-6 text-blue-200 group-hover:scale-110 group-hover:bg-blue-100 transition-all duration-500">
+                          <CheckCircle2 size={32} />
+                        </div>
+                        <div className="space-y-6">
+                           <div className="space-y-2">
+                             <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none">Status: Terkirim</p>
+                             <h4 className="text-2xl font-black text-slate-900 tracking-tighter">{claim.reason}</h4>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatDate(claim.createdAt)}</p>
+                           </div>
+                           <button 
+                             onClick={() => window.open(claim.gformLink, '_blank')}
+                             className="flex items-center gap-2 text-xs font-black text-blue-600 uppercase tracking-widest underline decoration-2 underline-offset-4 hover:text-blue-700 transition-colors"
+                           >
+                             Lihat Form <ExternalLink size={14} />
+                           </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
             )}
 
             {activeTab === 'regulasi' && (
@@ -1345,71 +1379,71 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
             {activeTab === 'certification' && (
               <motion.div
                 key="certification"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-10"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="max-w-6xl mx-auto space-y-10"
               >
                 <div className="flex items-center justify-between">
-                  <div className="space-y-2 text-left">
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Sertifikasi & Lisensi</h3>
-                    <p className="text-sm font-medium text-slate-400 italic">Daftar sertifikasi profesional yang Anda miliki.</p>
+                  <div className="space-y-1 text-left">
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Sertifikasi</h3>
+                    <p className="text-xs font-bold text-slate-400 italic">Daftar lisensi dan sertifikat kompetensi Anda</p>
                   </div>
                   <button 
-                    onClick={() => { setSelectedCertification(null); setIsEditingCertification(true); }}
-                    className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-100 hover:scale-105 active:scale-95 transition-all"
+                    onClick={() => setIsAddingCertification(true)}
+                    className="flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-100 hover:bg-blue-600 active:scale-95 transition-all"
                   >
-                    <Plus size={18} /> Tambah Sertifikasi
+                    <Award size={18} /> Tambah Sertifikasi
                   </button>
                 </div>
 
-                {certifications.length === 0 ? (
-                  <div className="rounded-[48px] bg-white border-2 border-dashed border-slate-100 p-20 text-center flex flex-col items-center gap-6">
-                    <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
-                      <Award size={48} />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xl font-bold text-slate-900">Belum ada sertifikasi</p>
-                      <p className="text-sm text-slate-400 max-w-sm">Anda belum menambahkan sertifikasi apapun. Klik tombol di atas untuk memulai.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {certifications.map((cert) => (
-                      <div key={cert.id} className="group relative bg-white rounded-[40px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-blue-100/50 transition-all">
-                        <div className="aspect-[4/3] bg-slate-50 overflow-hidden relative">
-                          {cert.photoUrl ? (
-                            <img src={cert.photoUrl} alt={cert.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-200">
-                              <FileText size={64} />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <div className="p-8 space-y-4 text-left">
-                          <div className="space-y-1">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none pt-0.5">{formatDate(cert.date)}</p>
-                            <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase line-clamp-2">{cert.name}</h4>
-                          </div>
-                          <div className="pt-4 flex items-center justify-between border-t border-slate-50">
-                            <button 
-                              onClick={() => { setSelectedCertification(cert); setIsEditingCertification(true); }}
-                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors"
-                            >
-                              Edit Data
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteCertification(cert.id)}
-                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {certifications.length === 0 ? (
+                    <div className="md:col-span-2 lg:col-span-3 rounded-[40px] bg-white p-20 text-center border-2 border-dashed border-slate-100 shadow-sm">
+                      <div className="h-20 w-20 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-300 mx-auto mb-6">
+                        <Award size={40} />
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <p className="text-slate-400 font-bold text-lg">Belum ada sertifikasi yang diunggah</p>
+                    </div>
+                  ) : (
+                    certifications.map((cert, i) => (
+                      <div key={cert.id || i} className="group bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/5 transition-all space-y-6">
+                         <div className="aspect-[4/3] rounded-[32px] bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-50">
+                            {cert.certificateFileUrl ? (
+                              <img src={cert.certificateFileUrl} alt={cert.certificationName} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                            ) : (
+                              <Trophy size={48} className="text-amber-100" />
+                            )}
+                         </div>
+                         <div className="space-y-2 text-left">
+                           <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{cert.certificationDate}</p>
+                           <h5 className="text-lg font-black text-slate-900 tracking-tight leading-tight uppercase">{cert.certificationName}</h5>
+                           <p className="text-[10px] font-bold text-slate-400 italic truncate">{cert.certificateFileName || 'Metadata only'}</p>
+                           <div className="pt-2 flex items-center justify-between">
+                              <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">Dibuat: {formatDate(cert.createdAt)}</p>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => { setSelectedCertification(cert); setIsEditingCertification(true); }}
+                                  className="h-8 w-8 flex items-center justify-center bg-slate-50 rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                                <button 
+                                  onClick={async () => {
+                                    if(confirm('Hapus sertifikasi ini?')) {
+                                      await deleteDoc(doc(db, 'users', viewedProfile.userId, 'certifications', cert.id!));
+                                    }
+                                  }}
+                                  className="h-8 w-8 flex items-center justify-center bg-slate-50 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                           </div>
+                         </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </motion.div>
             )}
 
@@ -1784,81 +1818,128 @@ function EditAreaDataModal({ isOpen, onClose, data, onSave }: any) {
   );
 }
 
-function EditCareerModal({ isOpen, onClose, data, onSave }: any) {
-  const [currentData, setCurrentData] = useState(data || []);
-
-  useEffect(() => {
-    setCurrentData(data || []);
-  }, [data, isOpen]);
-
-  const moveItem = (index: number, direction: 'up' | 'down') => {
-    const next = [...currentData];
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= currentData.length) return;
-    
-    [next[index], next[newIndex]] = [next[newIndex], next[index]];
-    setCurrentData(next);
-  };
+function EditPersonalDataModal({ isOpen, onClose, data, onSave }: any) {
+  const [form, setForm] = useState<Partial<PersonalData>>(data || {});
+  useEffect(() => { setForm(data || {}); }, [data, isOpen]);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Riwayat Karir">
-      <div className="space-y-6">
-        {currentData.map((item: any, i: number) => (
-          <div key={i} className="p-6 bg-slate-50 rounded-[32px] space-y-4 relative group">
-             <div className="absolute top-4 right-4 flex gap-2">
-                <div className="flex flex-col gap-1">
-                  <button 
-                    disabled={i === 0}
-                    onClick={() => moveItem(i, 'up')}
-                    className="p-1 text-slate-300 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
-                    title="Pindahkan ke atas"
-                  >
-                    <ChevronUp size={16} />
-                  </button>
-                  <button 
-                    disabled={i === currentData.length - 1}
-                    onClick={() => moveItem(i, 'down')}
-                    className="p-1 text-slate-300 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
-                    title="Pindahkan ke bawah"
-                  >
-                    <ChevronDown size={16} />
-                  </button>
-                </div>
-                <button 
-                  onClick={() => setCurrentData(currentData.filter((_: any, idx: number) => idx !== i))}
-                  className="p-1 text-red-300 hover:text-red-500 transition-colors"
-                  title="Hapus"
-                >
-                  <Trash2 size={16} />
-                </button>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <Input label="Periode" value={item.period} onChange={(v) => {
-                  const next = [...currentData];
-                  next[i] = {...item, period: v};
-                  setCurrentData(next);
-                }} />
-                <Input label="Jabatan" value={item.position} onChange={(v) => {
-                  const next = [...currentData];
-                  next[i] = {...item, position: v};
-                  setCurrentData(next);
-                }} />
-             </div>
-             <Input label="Unit" value={item.unit} onChange={(v) => {
-               const next = [...currentData];
-               next[i] = {...item, unit: v};
-               setCurrentData(next);
-             }} />
-          </div>
-        ))}
-        <button 
-          onClick={() => setCurrentData([{ period: "20XX - 20XX", position: "New Position", unit: "Lazuardi", active: false }, ...currentData])}
-          className="w-full py-4 border-2 border-dashed border-slate-200 text-slate-400 font-bold rounded-3xl hover:bg-slate-50 transition-all"
-        >
-          + Tambah Riwayat
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Data Diri">
+      <div className="space-y-6 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input label="Nama Lengkap" value={form.namaLengkap || ''} onChange={(v) => setForm({...form, namaLengkap: v})} />
+          <Input label="NIY / Pegawai ID" value={form.niy || ''} onChange={(v) => setForm({...form, niy: v})} />
+          <Input label="NIK (KTP)" value={form.nik || ''} onChange={(v) => setForm({...form, nik: v})} />
+          <Input label="NPWP" value={form.npwp || ''} onChange={(v) => setForm({...form, npwp: v})} />
+          <Input label="Gender" value={form.gender || ''} onChange={(v) => setForm({...form, gender: v})} />
+          <Input label="Status Kawin" value={form.statusKawin || ''} onChange={(v) => setForm({...form, statusKawin: v})} />
+          <Input label="Tempat Lahir" value={form.tempatLahir || ''} onChange={(v) => setForm({...form, tempatLahir: v})} />
+          <Input label="Tanggal Lahir" value={form.tanggalLahir || ''} onChange={(v) => setForm({...form, tanggalLahir: v})} />
+          <Input label="Jabatan" value={form.jabatan || ''} onChange={(v) => setForm({...form, jabatan: v})} />
+          <Input label="Unit" value={form.unit || ''} onChange={(v) => setForm({...form, unit: v})} />
+          <Input label="Email Official" value={form.emailOfficial || ''} onChange={(v) => setForm({...form, emailOfficial: v})} />
+          <Input label="Status Kontrak" value={form.statusKontrak || ''} onChange={(v) => setForm({...form, statusKontrak: v})} />
+          <Input label="Tanggal Masuk" value={form.tanggalMasuk || ''} onChange={(v) => setForm({...form, tanggalMasuk: v})} />
+          <Input label="Akses Level" value={form.aksesLevel || ''} onChange={(v) => setForm({...form, aksesLevel: v})} />
+          <Input label="Tingkat Pendidikan" value={form.tingkatPendidikan || ''} onChange={(v) => setForm({...form, tingkatPendidikan: v})} />
+          <Input label="Institusi/Jurusan" value={form.institusiJurusan || ''} onChange={(v) => setForm({...form, institusiJurusan: v})} />
+          <Input label="BPJS Nomor" value={form.bpjsNomor || ''} onChange={(v) => setForm({...form, bpjsNomor: v})} />
+          <Input label="IDP Link" value={form.idpLink || ''} onChange={(v) => setForm({...form, idpLink: v})} />
+          <Input label="Telepon" value={form.telepon || ''} onChange={(v) => setForm({...form, telepon: v})} />
+        </div>
+        <div className="col-span-2">
+            <Input label="Alamat Lengkap" value={form.alamatLengkap || ''} onChange={(v) => setForm({...form, alamatLengkap: v})} />
+        </div>
+        <button onClick={() => onSave(form)} className="w-full py-5 bg-slate-900 text-white font-black rounded-3xl shadow-xl shadow-slate-100 hover:scale-[1.02] active:scale-95 transition-all">
+           SIMPAN DATA DIRI
         </button>
-        <button onClick={() => { onSave(currentData); onClose(); }} className="w-full py-5 bg-indigo-600 text-white font-black rounded-3xl shadow-xl shadow-indigo-100 hover:scale-[1.02] active:scale-95 transition-all">
-           SIMPAN RIWAYAT
+      </div>
+    </Modal>
+  );
+}
+
+function EditContactDataModal({ isOpen, onClose, data, onSave }: any) {
+  const [form, setForm] = useState<Partial<ContactData>>(data || { namaKontak: '', hubungan: '', nomorHp: '', emergencyContact: false });
+  useEffect(() => { setForm(data || { namaKontak: '', hubungan: '', nomorHp: '', emergencyContact: false }); }, [data, isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Kontak" : "Tambah Kontak Darurat"}>
+      <div className="space-y-6 text-left">
+        <Input label="Nama Kontak" value={form.namaKontak || ''} onChange={(v) => setForm({...form, namaKontak: v})} />
+        <Input label="Hubungan" value={form.hubungan || ''} onChange={(v) => setForm({...form, hubungan: v})} />
+        <Input label="Nomor HP" value={form.nomorHp || ''} onChange={(v) => setForm({...form, nomorHp: v})} />
+        <div className="flex items-center gap-3">
+          <input 
+            type="checkbox" 
+            id="emergency" 
+            checked={form.emergencyContact} 
+            onChange={(e) => setForm({...form, emergencyContact: e.target.checked})} 
+            className="h-5 w-5 rounded border-slate-200 text-blue-600 outline-none"
+          />
+          <label htmlFor="emergency" className="text-xs font-bold text-slate-600 uppercase">Jadikan Kontak Darurat Utaman</label>
+        </div>
+        <button onClick={() => onSave(form)} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all">
+           SIMPAN KONTAK
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function AddAttendanceClaimModal({ isOpen, onClose, onSave }: any) {
+  const [form, setForm] = useState<Partial<AttendanceClaim>>({ reason: '', date: '', status: 'pending', gformLink: 'https://forms.gle/BCQrSBzraHaw1tmJ6' });
+  
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Ajukan Klaim Absensi">
+      <div className="space-y-6 text-left">
+        <p className="text-xs font-bold text-slate-400 italic">Isi data klaim Anda setelah mengisi Google Form resmi.</p>
+        <Input label="Alasan Klaim (Contoh: Lupa Absen Datang)" value={form.reason || ''} onChange={(v) => setForm({...form, reason: v})} />
+        <div className="space-y-1.5 flex-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanggal Kejadian</label>
+          <input 
+            type="date" 
+            value={form.date || ''} 
+            onChange={(e) => setForm({...form, date: e.target.value})}
+            className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
+          />
+        </div>
+        <Input label="Link Bukti G-Form (Opsional)" value={form.gformLink || ''} onChange={(v) => setForm({...form, gformLink: v})} />
+        
+        <div className="p-6 bg-blue-50 rounded-[32px] border border-blue-100 flex items-center gap-4">
+           <div className="h-10 w-10 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
+             <ExternalLink size={20} />
+           </div>
+           <div>
+             <p className="text-[10px] font-black text-blue-800 uppercase leading-none">Pastikan sudah mengisi form</p>
+             <a href="https://forms.gle/BCQrSBzraHaw1tmJ6" target="_blank" className="text-[9px] font-bold text-blue-500 underline uppercase tracking-widest">Buka Form Hubungan Kerja ↗</a>
+           </div>
+        </div>
+
+        <button 
+          onClick={() => {
+            if(!form.reason || !form.date) return alert("Mohon lengkapi data");
+            onSave(form);
+          }} 
+          className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all"
+        >
+           SUMMIT KLAIM
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditCareerModal({ isOpen, onClose, data, onSave }: any) {
+  const [form, setForm] = useState<Partial<CareerHistory>>(data || { period: '', position: '', unit: '' });
+  useEffect(() => { setForm(data || { period: '', position: '', unit: '' }); }, [data, isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Riwayat Karir" : "Tambah Riwayat Karir"}>
+      <div className="space-y-6 text-left">
+        <Input label="Periode (Contoh: 2020 - 2022)" value={form.period || ''} onChange={(v) => setForm({...form, period: v})} />
+        <Input label="Jabatan" value={form.position || ''} onChange={(v) => setForm({...form, position: v})} />
+        <Input label="Unit / Departemen" value={form.unit || ''} onChange={(v) => setForm({...form, unit: v})} />
+        <button onClick={() => onSave(form)} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all">
+           SIMPAN JABATAN
         </button>
       </div>
     </Modal>
@@ -2236,10 +2317,10 @@ function EditFaqItemModal({ isOpen, onClose, categoryId, data, onSave }: any) {
 }
 
 function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
-  const [form, setForm] = useState<Partial<Certification>>(data || { name: '', date: '', photoUrl: '' });
+  const [form, setForm] = useState<Partial<Certification>>(data || { certificationName: '', certificationDate: '', certificateFileUrl: '' });
   
   useEffect(() => { 
-    setForm(data || { name: '', date: '', photoUrl: '' }); 
+    setForm(data || { certificationName: '', certificationDate: '', certificateFileUrl: '' }); 
   }, [data, isOpen]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2251,7 +2332,7 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setForm({ ...form, photoUrl: reader.result as string });
+        setForm({ ...form, certificateFileUrl: reader.result as string, certificateFileName: file.name });
       };
       reader.readAsDataURL(file);
     }
@@ -2260,24 +2341,24 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Sertifikasi" : "Tambah Sertifikasi"}>
       <div className="space-y-6 text-left">
-        <Input label="Nama Sertifikasi" value={form.name || ''} onChange={(v) => setForm({...form, name: v})} />
+        <Input label="Nama Sertifikasi" value={form.certificationName || ''} onChange={(v) => setForm({...form, certificationName: v})} />
         <div className="space-y-1.5 flex-1">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanggal Sertifikasi</label>
           <input 
             type="date" 
-            value={form.date || ''} 
-            onChange={(e) => setForm({...form, date: e.target.value})}
+            value={form.certificationDate || ''} 
+            onChange={(e) => setForm({...form, certificationDate: e.target.value})}
             className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
           />
         </div>
         
         <div className="space-y-4">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Foto Sertifikat</label>
-          {form.photoUrl && (
+          {form.certificateFileUrl && (
             <div className="relative aspect-video rounded-3xl overflow-hidden border border-slate-100 mb-4 bg-slate-50">
-              <img src={form.photoUrl} alt="Preview" className="w-full h-full object-contain" />
+              <img src={form.certificateFileUrl} alt="Preview" className="w-full h-full object-contain" />
               <button 
-                onClick={() => setForm({...form, photoUrl: ''})}
+                onClick={() => setForm({...form, certificateFileUrl: '', certificateFileName: ''})}
                 className="absolute top-4 right-4 h-8 w-8 bg-black/50 text-white rounded-full flex items-center justify-center hover:bg-red-500 transition-colors"
               >
                 ✕
@@ -2294,7 +2375,7 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
 
         <button 
           onClick={() => {
-            if (!form.name || !form.date) {
+            if (!form.certificationName || !form.certificationDate) {
               alert('Nama dan tanggal wajib diisi');
               return;
             }

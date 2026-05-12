@@ -18,6 +18,18 @@ export default function Login({ onLogin }: LoginProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await onLogin();
+    } catch (err: any) {
+      setError(err.message || 'Gagal masuk dengan Google.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -189,8 +201,9 @@ export default function Login({ onLogin }: LoginProps) {
 
               <button
                 type="button"
-                onClick={onLogin}
-                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <img src="https://www.google.com/favicon.ico" alt="Google" className="h-5 w-5" />
                 <span className="text-slate-700 uppercase tracking-widest group-hover:text-blue-700">Lanjutkan dengan Google</span>

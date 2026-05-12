@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { auth, signInWithGoogle } from './lib/firebase';
+import { auth, db, handleFirestoreError, OperationType, signInWithGoogle } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -16,27 +17,32 @@ export default function App() {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        // Create a minimal profile from auth data since we're not using Firestore yet
-        const currentProfile: UserProfile = {
-          userId: firebaseUser.uid,
-          name: firebaseUser.displayName || 'User',
-          email: firebaseUser.email || '',
-          role: firebaseUser.email === 'maudy@lazuardi.sch.id' ? 'admin' : 'employee',
-          photoUrl: firebaseUser.photoURL || '',
-          createdAt: new Date().toISOString(),
-          niy: "",
-          nik: "",
-          unit: "Lazuardi",
-          position: "Karyawan",
-          contractStatus: "Full Time",
-          entryDate: "",
-          gender: "",
-          birthPlace: "",
-          birthDate: "",
-          education: "",
-          phone: "",
-        };
-        setProfile(currentProfile);
+        try {
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const profileSnap = await getDoc(profileRef);
+          
+          let currentProfile: UserProfile;
+
+          if (profileSnap.exists()) {
+            currentProfile = profileSnap.data() as UserProfile;
+          } else {
+            currentProfile = {
+              userId: firebaseUser.uid,
+              name: firebaseUser.displayName || 'User',
+              email: firebaseUser.email || '',
+              role: firebaseUser.email === 'maudy@lazuardi.sch.id' ? 'admin' : 'employee',
+              photoUrl: firebaseUser.photoURL || '',
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(profileRef, {
+              ...currentProfile,
+              createdAt: serverTimestamp()
+            });
+          }
+          setProfile(currentProfile);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+        }
       } else {
         setProfile(null);
       }

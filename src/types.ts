@@ -1,50 +1,64 @@
 export interface UserProfile {
   userId: string;
-  niy?: string;
   name: string;
+  email: string;
+  role: 'employee' | 'admin';
+  photoUrl?: string;
+  niy?: string;
+  position?: string;
+  unit?: string;
   nik?: string;
   bpjs?: string;
-  email: string;
-  npwp?: string;
-  unit?: string;
-  position?: string;
-  contractStatus?: string;
-  entryDate?: string;
   gender?: string;
   birthPlace?: string;
   birthDate?: string;
+  phone?: string;
+  maritalStatus?: string;
   educationLevel?: string;
   education?: string;
   address?: string;
-  phone?: string;
-  maritalStatus?: string;
-  role: 'employee' | 'admin';
-  photoUrl?: string;
+  contractStatus?: string;
   idpLink?: string;
-  emergencyContact?: {
-    name: string;
-    relationship: string;
-    phone: string;
-  };
-  careerHistory?: CareerHistory[];
-  cutiData?: { tahunan: number; besar: number };
-  longServiceLeave?: LongServiceCycle[];
+  entryDate?: string;
   createdAt: string;
+  updatedAt?: any;
+  careerHistory?: CareerHistory[];
+  longServiceLeave?: {
+    id?: string;
+    cycleNumber: number;
+    dateObtained: string;
+    status: string;
+  }[];
+}
+
+export interface AttendanceRecord {
+  id: string;
+  userId: string;
+  date: string;
+  checkIn: string;
+  checkOut?: string;
+  status: string;
+}
+
+export interface LeaveEntitlement {
+  id: string;
+  type: string;
+  balance: number;
+  total: number;
 }
 
 export interface RegulationItem {
   id: string;
   title: string;
   description: string;
-  iconType: 'alert' | 'check';
+  iconType: 'check' | 'alert';
 }
 
 export interface RegulationCategory {
   id: string;
   title: string;
-  description?: string;
-  items: RegulationItem[];
   order: number;
+  items: RegulationItem[];
 }
 
 export interface FaqItem {
@@ -56,76 +70,68 @@ export interface FaqItem {
 export interface FaqCategory {
   id: string;
   title: string;
-  items: FaqItem[];
   order: number;
+  items: FaqItem[];
 }
 
-export interface LongServiceCycle {
-  id: string;
-  cycleNumber: number;
-  dateObtained: string;
-  status: 'obtained' | 'upcoming' | 'available' | 'claimed' | 'expired';
+export interface PersonalData {
+  id?: string;
+  namaLengkap: string;
+  niy: string;
+  jabatan: string;
+  unit: string;
+  emailOfficial: string;
+  telepon: string;
+  nik: string;
+  npwp: string;
+  gender: string;
+  statusKawin: string;
+  tempatLahir: string;
+  tanggalLahir: string;
+  alamatLengkap: string;
+  tingkatPendidikan: string;
+  institusiJurusan: string;
+  statusKontrak: string;
+  tanggalMasuk: string;
+  bpjsNomor: string;
+  idpLink: string;
+  aksesLevel: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface ContactData {
+  id?: string;
+  namaKontak: string;
+  hubungan: string;
+  nomorHp: string;
+  emergencyContact: boolean;
+  updatedAt: any;
 }
 
 export interface CareerHistory {
   id?: string;
-  userId?: string;
   period: string;
   position: string;
   unit: string;
   active?: boolean;
-  description?: string;
-}
-
-export interface LeaveEntitlement {
-  userId: string;
-  type: 'Annual' | 'Big Leave';
-  totalDays: number;
-  usedDays: number;
-  availableDays: number;
-  lastGrantDate: string;
-  nextGrantDate: string;
+  createdAt?: any;
 }
 
 export interface AttendanceClaim {
-  id: string;
-  userId: string;
-  userName: string;
-  date: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-}
-
-export interface AttendanceRecord {
   id?: string;
-  userId: string;
-  date: string; // YYYY-MM-DD
-  checkIn?: {
-    time: any; // Firestore Timestamp
-    location: {
-      lat: number;
-      lng: number;
-    };
-    address?: string;
-  };
-  checkOut?: {
-    time: any; // Firestore Timestamp
-    location: {
-      lat: number;
-      lng: number;
-    };
-    address?: string;
-  };
-  status: 'present' | 'late' | 'absent';
-  notes?: string;
+  reason: string;
+  date: string;
+  status: 'pending' | 'approved' | 'rejected';
+  gformLink: string;
+  createdAt: any;
 }
 
 export interface Certification {
-  id: string;
-  userId: string;
-  name: string;
-  date: string;
-  photoUrl?: string;
-  createdAt: string;
+  id?: string;
+  certificationName: string;
+  certificationDate: string;
+  certificateFileName?: string;
+  certificateFileUrl?: string;
+  createdAt: any;
 }
