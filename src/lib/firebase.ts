@@ -1,10 +1,25 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  sendPasswordResetEmail,
+  updateProfile,
+  signOut
+} from 'firebase/auth';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAk31R8g0A9xOf4VwQvdOEhCxpo58K6hfQ",
+  authDomain: "myhrlazuardi.firebaseapp.com",
+  projectId: "myhrlazuardi",
+  storageBucket: "myhrlazuardi.firebasestorage.app",
+  messagingSenderId: "1086201788098",
+  appId: "1:1086201788098:web:629204dffa70b398f6ed5b"
+};
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -30,17 +45,12 @@ export async function signInWithGoogle() {
   }
 }
 
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  sendPasswordResetEmail,
-  updateProfile
-} from 'firebase/auth';
-
 export async function signUp(email: string, pass: string, name: string) {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(result.user, { displayName: name });
+    if (name) {
+      await updateProfile(result.user, { displayName: name });
+    }
     return result.user;
   } catch (error) {
     console.error("Error signing up", error);
@@ -58,6 +68,15 @@ export async function signIn(email: string, pass: string) {
   }
 }
 
+export async function signOutUser() {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Error signing out", error);
+    throw error;
+  }
+}
+
 export async function resetPassword(email: string) {
   try {
     await sendPasswordResetEmail(auth, email);
@@ -65,50 +84,4 @@ export async function resetPassword(email: string) {
     console.error("Error resetting password", error);
     throw error;
   }
-}
-
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
-  }
-}
-testConnection();
-
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-  }
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
