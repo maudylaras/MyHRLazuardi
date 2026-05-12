@@ -167,15 +167,35 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="pt-2 text-center">
           {mode === 'login' ? (
-            <p className="text-xs font-bold text-slate-500">
-              Belum punya akun?{' '}
-              <button 
-                onClick={() => setMode('signup')}
-                className="text-blue-600 font-black hover:underline uppercase"
+            <div className="space-y-6">
+              <p className="text-xs font-bold text-slate-500">
+                Belum punya akun?{' '}
+                <button 
+                  onClick={() => setMode('signup')}
+                  className="text-blue-600 font-black hover:underline uppercase"
+                >
+                  Daftar
+                </button>
+              </p>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-slate-100"></span>
+                </div>
+                <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
+                  <span className="bg-white px-4 text-slate-400">Atau</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onLogin}
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95"
               >
-                Daftar
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="h-5 w-5" />
+                <span className="text-slate-700 uppercase tracking-widest group-hover:text-blue-700">Lanjutkan dengan Google</span>
               </button>
-            </p>
+            </div>
           ) : (
             <button 
               onClick={() => setMode('login')}
@@ -186,8 +206,9 @@ export default function Login({ onLogin }: LoginProps) {
           )}
         </div>
 
-        <div className="pt-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-          &copy; 2026 MyHR Lazuardi. Powered by HR Connect Pro.
+        <div className="pt-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] space-y-1">
+          <div>&copy; 2026 MyHR Lazuardi. Powered by HR Connect Pro.</div>
+          <div className="text-blue-400/50 italic">Administrator: maudy@lazuardi.sch.id</div>
         </div>
       </motion.div>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { auth } from './lib/firebase';
+import { auth, signInWithGoogle } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
@@ -59,7 +59,7 @@ export default function App() {
       {user && profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <Login onLogin={() => {}} />
+        <Login onLogin={signInWithGoogle} />
       )}
     </div>
   );
