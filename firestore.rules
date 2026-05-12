@@ -73,6 +73,16 @@ service cloud.firestore {
              data.order is int;
     }
 
+    function isValidCertification(data) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'date', 'createdAt']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() <= 200 &&
+             data.date is string && data.date.size() == 10 &&
+             data.createdAt is string &&
+             (data.get('photoUrl', null) == null || (data.photoUrl is string && data.photoUrl.size() <= 1200000));
+    }
+
     // User Profiles
     match /users/{userId} {
       allow get: if isSignedIn();
@@ -80,6 +90,14 @@ service cloud.firestore {
       allow create: if (isOwner(userId) && isValidUser(incoming()) && (incoming().role == 'employee' || incoming().email == 'maudy@lazuardi.sch.id')) || isAdmin();
       allow update: if (isOwner(userId) || isAdmin()) && 
                     (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoUrl', 'position', 'department', 'address', 'phone']));
+    }
+
+    // Certifications
+    match /certifications/{certId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidCertification(incoming());
+      allow update: if isSignedIn() && isValidCertification(incoming()) && incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
     // Regulations

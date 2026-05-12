@@ -120,3 +120,12 @@ export interface AttendanceRecord {
   status: 'present' | 'late' | 'absent';
   notes?: string;
 }
+
+export interface Certification {
+  id: string;
+  userId: string;
+  name: string;
+  date: string;
+  photoUrl?: string;
+  createdAt: string;
+}

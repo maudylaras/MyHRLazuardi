@@ -9,7 +9,8 @@ import {
   RegulationCategory,
   FaqCategory,
   RegulationItem,
-  FaqItem
+  FaqItem,
+  Certification
 } from '../types';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { ALL_EMPLOYEES } from '../data/employees';
@@ -90,7 +91,7 @@ interface DashboardProps {
   profile: UserProfile;
 }
 
-type Tab = 'dashboard' | 'data-diri' | 'karir' | 'cuti' | 'klaim' | 'regulasi' | 'faq';
+type Tab = 'dashboard' | 'data-diri' | 'karir' | 'cuti' | 'klaim' | 'regulasi' | 'faq' | 'certification';
 
 const BAR_DATA = [
   { name: 'TA 20/21', TK: 16, SD: 47, SMP: 18, SUPPORT: 66 },
@@ -149,15 +150,18 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
   const [regulationCategories, setRegulationCategories] = useState<RegulationCategory[]>([]);
   const [faqCategories, setFaqCategories] = useState<FaqCategory[]>([]);
+  const [certifications, setCertifications] = useState<Certification[]>([]);
   const [isEditingRegCategory, setIsEditingRegCategory] = useState(false);
   const [isEditingRegItem, setIsEditingRegItem] = useState(false);
   const [isEditingFaqCategory, setIsEditingFaqCategory] = useState(false);
   const [isEditingFaqItem, setIsEditingFaqItem] = useState(false);
+  const [isEditingCertification, setIsEditingCertification] = useState(false);
   
   const [selectedRegCategory, setSelectedRegCategory] = useState<RegulationCategory | null>(null);
   const [selectedFaqCategory, setSelectedFaqCategory] = useState<FaqCategory | null>(null);
   const [selectedRegItem, setSelectedRegItem] = useState<{ categoryId: string, item?: RegulationItem } | null>(null);
   const [selectedFaqItem, setSelectedFaqItem] = useState<{ categoryId: string, item?: FaqItem } | null>(null);
+  const [selectedCertification, setSelectedCertification] = useState<Certification | null>(null);
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [empSearch, setEmpSearch] = useState('');
 
@@ -178,9 +182,17 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       handleFirestoreError(err, OperationType.LIST, 'helpCenter');
     });
 
+    const unsubCert = onSnapshot(query(collection(db, 'certifications'), where('userId', '==', profile.userId)), (snap) => {
+      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
+      setCertifications(certs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'certifications');
+    });
+
     return () => {
       unsubReg();
       unsubFaq();
+      unsubCert();
     };
   }, []);
 
@@ -309,6 +321,30 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       await updateDoc(doc(db, 'helpCenter', categoryId), { items: newItems });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+    }
+  };
+
+  const handleSaveCertification = async (cert: Partial<Certification>) => {
+    try {
+      const id = cert.id || `cert_${Date.now()}`;
+      await setDoc(doc(db, 'certifications', id), {
+        ...cert,
+        id,
+        userId: profile.userId,
+        createdAt: cert.createdAt || new Date().toISOString()
+      }, { merge: true });
+      setIsEditingCertification(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'certifications');
+    }
+  };
+
+  const handleDeleteCertification = async (id: string) => {
+    if (!confirm('Hapus sertifikasi ini?')) return;
+    try {
+      await deleteDoc(doc(db, 'certifications', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'certifications');
     }
   };
 
@@ -575,6 +611,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           <SidebarItem id="karir" icon={<Trophy size={22} />} label="Progress Karir" />
           <SidebarItem id="cuti" icon={<Calendar size={22} />} label="Cuti Besar" />
           <SidebarItem id="klaim" icon={<Fingerprint size={22} />} label="Klaim Absensi" />
+          <SidebarItem id="certification" icon={<Award size={22} />} label="Sertifikasi" />
           <SidebarItem id="regulasi" icon={<BookOpen size={22} />} label="Regulasi" />
           <SidebarItem id="faq" icon={<HelpCircle size={22} />} label="Pusat Bantuan" />
         </nav>
@@ -600,7 +637,8 @@ export default function Dashboard({ user, profile }: DashboardProps) {
               {activeTab === 'data-diri' ? 'Karyawan Profile' : 
                activeTab === 'cuti' ? 'Cuti Besar' : 
                activeTab === 'regulasi' ? 'Regulasi & Kebijakan' : 
-               activeTab === 'faq' ? 'Pusat Bantuan' : 'Dashboard Hub'}
+               activeTab === 'faq' ? 'Pusat Bantuan' : 
+               activeTab === 'certification' ? 'Sertifikasi Saya' : 'Dashboard Hub'}
             </h2>
           </div>
           
@@ -687,6 +725,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
             categoryId={selectedFaqItem?.categoryId}
             data={selectedFaqItem?.item}
             onSave={handleSaveFaqItem}
+          />
+
+          <EditCertificationModal
+            isOpen={isEditingCertification}
+            onClose={() => setIsEditingCertification(false)}
+            data={selectedCertification}
+            onSave={handleSaveCertification}
           />
 
           <AnimatePresence mode="wait">
@@ -1587,6 +1632,77 @@ export default function Dashboard({ user, profile }: DashboardProps) {
               </motion.div>
             )}
 
+            {activeTab === 'certification' && (
+              <motion.div
+                key="certification"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-10"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2 text-left">
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Sertifikasi & Lisensi</h3>
+                    <p className="text-sm font-medium text-slate-400 italic">Daftar sertifikasi profesional yang Anda miliki.</p>
+                  </div>
+                  <button 
+                    onClick={() => { setSelectedCertification(null); setIsEditingCertification(true); }}
+                    className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-100 hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <Plus size={18} /> Tambah Sertifikasi
+                  </button>
+                </div>
+
+                {certifications.length === 0 ? (
+                  <div className="rounded-[48px] bg-white border-2 border-dashed border-slate-100 p-20 text-center flex flex-col items-center gap-6">
+                    <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
+                      <Award size={48} />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xl font-bold text-slate-900">Belum ada sertifikasi</p>
+                      <p className="text-sm text-slate-400 max-w-sm">Anda belum menambahkan sertifikasi apapun. Klik tombol di atas untuk memulai.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {certifications.map((cert) => (
+                      <div key={cert.id} className="group relative bg-white rounded-[40px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-blue-100/50 transition-all">
+                        <div className="aspect-[4/3] bg-slate-50 overflow-hidden relative">
+                          {cert.photoUrl ? (
+                            <img src={cert.photoUrl} alt={cert.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-200">
+                              <FileText size={64} />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="p-8 space-y-4 text-left">
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none pt-0.5">{formatDate(cert.date)}</p>
+                            <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase line-clamp-2">{cert.name}</h4>
+                          </div>
+                          <div className="pt-4 flex items-center justify-between border-t border-slate-50">
+                            <button 
+                              onClick={() => { setSelectedCertification(cert); setIsEditingCertification(true); }}
+                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors"
+                            >
+                              Edit Data
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteCertification(cert.id)}
+                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+
             {activeTab === 'faq' && (
               <motion.div
                 key="faq"
@@ -1602,13 +1718,22 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                     <h3 className="text-6xl font-black text-slate-900 tracking-tighter">Apa yang bisa kami bantu?</h3>
                     <p className="text-slate-400 font-medium text-lg leading-relaxed italic">Temukan jawaban atas pertanyaan umum seputar kebijakan, sistem, dan operasional MyHR Connect di satu tempat.</p>
                     
-                    <div className="relative mt-12">
-                       <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
-                       <input 
-                        type="text" 
-                        placeholder="Cari topik atau pertanyaan..." 
-                        className="w-full bg-white border-2 border-slate-100 py-8 pl-20 pr-10 rounded-[32px] text-xl font-bold shadow-2xl shadow-indigo-100/20 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
-                       />
+                    <div className="relative mt-12 flex flex-col items-center gap-4">
+                       <div className="relative w-full">
+                         <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
+                         <input 
+                          type="text" 
+                          placeholder="Cari topik atau pertanyaan..." 
+                          className="w-full bg-white border-2 border-slate-100 py-8 pl-20 pr-10 rounded-[32px] text-xl font-bold shadow-2xl shadow-indigo-100/20 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+                         />
+                       </div>
+                       
+                       <button 
+                         className="mt-4 flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-200 hover:scale-105 active:scale-95 transition-all"
+                         onClick={() => window.open('mailto:hr@lazuardi.sch.id?subject=Bantuan HR')}
+                       >
+                         <Phone size={18} /> Tanyakan ke tim HR
+                       </button>
                     </div>
                 </div>
 
@@ -2394,6 +2519,80 @@ function EditFaqItemModal({ isOpen, onClose, categoryId, data, onSave }: any) {
         </div>
         <button onClick={() => onSave(categoryId, form)} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl shadow-xl">
            SIMPAN ITEM
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
+  const [form, setForm] = useState<Partial<Certification>>(data || { name: '', date: '', photoUrl: '' });
+  
+  useEffect(() => { 
+    setForm(data || { name: '', date: '', photoUrl: '' }); 
+  }, [data, isOpen]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 800000) { // Limit to ~800KB for Base64 storage
+        alert('File terlalu besar. Maksimum 800KB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setForm({ ...form, photoUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Sertifikasi" : "Tambah Sertifikasi"}>
+      <div className="space-y-6 text-left">
+        <Input label="Nama Sertifikasi" value={form.name || ''} onChange={(v) => setForm({...form, name: v})} />
+        <div className="space-y-1.5 flex-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanggal Sertifikasi</label>
+          <input 
+            type="date" 
+            value={form.date || ''} 
+            onChange={(e) => setForm({...form, date: e.target.value})}
+            className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
+          />
+        </div>
+        
+        <div className="space-y-4">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Foto Sertifikat</label>
+          {form.photoUrl && (
+            <div className="relative aspect-video rounded-3xl overflow-hidden border border-slate-100 mb-4 bg-slate-50">
+              <img src={form.photoUrl} alt="Preview" className="w-full h-full object-contain" />
+              <button 
+                onClick={() => setForm({...form, photoUrl: ''})}
+                className="absolute top-4 right-4 h-8 w-8 bg-black/50 text-white rounded-full flex items-center justify-center hover:bg-red-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <input 
+            type="file" 
+            accept="image/*"
+            onChange={handleFileChange}
+            className="w-full text-xs text-slate-400 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:uppercase file:tracking-widest file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100 transition-all"
+          />
+        </div>
+
+        <button 
+          onClick={() => {
+            if (!form.name || !form.date) {
+              alert('Nama dan tanggal wajib diisi');
+              return;
+            }
+            onSave(form);
+          }} 
+          className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all"
+        >
+          SIMPAN SERTIFIKASI
         </button>
       </div>
     </Modal>
