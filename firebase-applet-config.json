@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0357742220",
-  "appId": "1:518447163009:web:7e9471eba7fa139a0ecf80",
-  "apiKey": "AIzaSyAyFWELZXwoB3AdLa8cdxKGcYkL_a6Q590",
-  "authDomain": "gen-lang-client-0357742220.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-c88753f9-eccc-49f4-9b81-03300b65d0dc",
-  "storageBucket": "gen-lang-client-0357742220.firebasestorage.app",
-  "messagingSenderId": "518447163009",
+  "projectId": "myhr-lazuardi",
+  "appId": "1:684074842242:web:3573a269f74f8e8ebe9c9b",
+  "apiKey": "AIzaSyBBMZxOIlMjqgJB1WDTJ7MZMOgMFiU5Xis",
+  "authDomain": "myhr-lazuardi.firebaseapp.com",
+  "storageBucket": "myhr-lazuardi.firebasestorage.app",
+  "messagingSenderId": "684074842242",
+  "firestoreDatabaseId": "",
   "measurementId": ""
 }

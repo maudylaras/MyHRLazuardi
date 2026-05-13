@@ -1,8 +1,35 @@
 import React, { useState, useEffect, ReactNode, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { UserProfile, AttendanceRecord, CareerHistory, LeaveEntitlement, AttendanceClaim, RegulationCategory, FaqCategory, RegulationItem, FaqItem, Certification } from '../types';
-import { signOutUser, auth } from '../lib/firebase';
+import { 
+  UserProfile, 
+  AttendanceRecord, 
+  CareerHistory, 
+  LeaveEntitlement, 
+  AttendanceClaim,
+  RegulationCategory,
+  FaqCategory,
+  RegulationItem,
+  FaqItem,
+  Certification
+} from '../types';
+import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { ALL_EMPLOYEES } from '../data/employees';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  setDoc,
+  deleteDoc,
+  getDoc,
+  doc, 
+  orderBy, 
+  limit, 
+  onSnapshot,
+  serverTimestamp 
+} from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, 
@@ -141,48 +168,186 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    // Firestore listeners disabled as per requirement "Do NOT use Firestore yet"
-    return () => {};
+    /* Firestore disabled as per user request
+    const unsubReg = onSnapshot(collection(db, 'regulations'), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegulationCategory));
+      setRegulationCategories(cats.sort((a, b) => a.order - b.order));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'regulations');
+    });
+    
+    const unsubFaq = onSnapshot(collection(db, 'helpCenter'), (snap) => {
+      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as FaqCategory));
+      setFaqCategories(cats.sort((a, b) => a.order - b.order));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'helpCenter');
+    });
+
+    const unsubCert = onSnapshot(query(collection(db, 'certifications'), where('userId', '==', profile.userId)), (snap) => {
+      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
+      setCertifications(certs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'certifications');
+    });
+
+    return () => {
+      unsubReg();
+      unsubFaq();
+      unsubCert();
+    };
+    */
   }, []);
 
-const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
-    setIsEditingRegCategory(false);
+  const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
+    try {
+      const id = cat.id || `reg_cat_${Date.now()}`;
+      await setDoc(doc(db, 'regulations', id), {
+        ...cat,
+        id,
+        items: cat.items || [],
+        order: cat.order || regulationCategories.length,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setIsEditingRegCategory(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+    }
   };
 
   const handleDeleteRegCategory = async (id: string) => {
     if (!confirm('Hapus kategori regulasi?')) return;
+    try {
+      await deleteDoc(doc(db, 'regulations', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'regulations');
+    }
   };
 
   const handleSaveRegItem = async (categoryId: string, item: Partial<RegulationItem>) => {
-    setIsEditingRegItem(false);
+    try {
+      const cat = regulationCategories.find(c => c.id === categoryId);
+      if (!cat) return;
+      
+      let newItems = [...(cat.items || [])];
+      const itemId = item.id || `item_${Date.now()}`;
+      const itemIndex = newItems.findIndex(i => i.id === itemId);
+      
+      const newItem = { ...item, id: itemId } as RegulationItem;
+      
+      if (itemIndex >= 0) {
+        newItems[itemIndex] = newItem;
+      } else {
+        newItems.push(newItem);
+      }
+      
+      await updateDoc(doc(db, 'regulations', categoryId), {
+        items: newItems,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingRegItem(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+    }
   };
 
   const handleDeleteRegItem = async (categoryId: string, itemId: string) => {
     if (!confirm('Hapus item regulasi?')) return;
+    try {
+      const cat = regulationCategories.find(c => c.id === categoryId);
+      if (!cat) return;
+      const newItems = cat.items.filter(i => i.id !== itemId);
+      await updateDoc(doc(db, 'regulations', categoryId), { items: newItems });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+    }
   };
 
   const handleSaveFaqCategory = async (cat: Partial<FaqCategory>) => {
-    setIsEditingFaqCategory(false);
+    try {
+      const id = cat.id || `faq_cat_${Date.now()}`;
+      await setDoc(doc(db, 'helpCenter', id), {
+        ...cat,
+        id,
+        items: cat.items || [],
+        order: cat.order || faqCategories.length,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setIsEditingFaqCategory(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+    }
   };
 
   const handleDeleteFaqCategory = async (id: string) => {
     if (!confirm('Hapus kategori FAQ?')) return;
+    try {
+      await deleteDoc(doc(db, 'helpCenter', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'helpCenter');
+    }
   };
 
   const handleSaveFaqItem = async (categoryId: string, item: Partial<FaqItem>) => {
-    setIsEditingFaqItem(false);
+    try {
+      const cat = faqCategories.find(c => c.id === categoryId);
+      if (!cat) return;
+      
+      let newItems = [...(cat.items || [])];
+      const itemId = item.id || `faq_item_${Date.now()}`;
+      const itemIndex = newItems.findIndex(i => i.id === itemId);
+      
+      const newItem = { ...item, id: itemId } as FaqItem;
+      
+      if (itemIndex >= 0) {
+        newItems[itemIndex] = newItem;
+      } else {
+        newItems.push(newItem);
+      }
+      
+      await updateDoc(doc(db, 'helpCenter', categoryId), {
+        items: newItems,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingFaqItem(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+    }
   };
 
   const handleDeleteFaqItem = async (categoryId: string, itemId: string) => {
     if (!confirm('Hapus item FAQ?')) return;
+    try {
+      const cat = faqCategories.find(c => c.id === categoryId);
+      if (!cat) return;
+      const newItems = cat.items.filter(i => i.id !== itemId);
+      await updateDoc(doc(db, 'helpCenter', categoryId), { items: newItems });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+    }
   };
 
   const handleSaveCertification = async (cert: Partial<Certification>) => {
-    setIsEditingCertification(false);
+    try {
+      const id = cert.id || `cert_${Date.now()}`;
+      await setDoc(doc(db, 'certifications', id), {
+        ...cert,
+        id,
+        userId: profile.userId,
+        createdAt: cert.createdAt || new Date().toISOString()
+      }, { merge: true });
+      setIsEditingCertification(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'certifications');
+    }
   };
 
   const handleDeleteCertification = async (id: string) => {
     if (!confirm('Hapus sertifikasi ini?')) return;
+    try {
+      await deleteDoc(doc(db, 'certifications', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'certifications');
+    }
   };
 
   const sortedCareerHistory = useMemo(() => {
@@ -210,26 +375,67 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsEditingProfile(false);
+    try {
+      const userRef = doc(db, 'users', profile.userId || user.uid);
+      await updateDoc(userRef, { 
+        name: profileForm.name,
+        position: profileForm.position,
+        unit: profileForm.unit,
+        niy: profileForm.niy,
+        contractStatus: profileForm.contractStatus,
+        email: profileForm.email,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingProfile(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
   };
 
   const handleSaveCareer = async (newHistory: CareerHistory[]) => {
-    setCareerHistory(newHistory);
-    setIsEditingCareer(false);
+    try {
+      const updatedProfile = { ...viewedProfile, careerHistory: newHistory };
+      await handleSaveEmployee(updatedProfile);
+      setCareerHistory(newHistory);
+      setIsEditingCareer(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
   };
 
   const handleSaveCuti = async (newData: any) => {
-    const { longServiceLeave, ...restCutiData } = newData;
-    setCutiData(restCutiData);
-    setIsEditingCuti(false);
+    try {
+      const { longServiceLeave, ...restCutiData } = newData;
+      const updatedProfile = { 
+        ...viewedProfile, 
+        cutiData: restCutiData,
+        longServiceLeave: longServiceLeave 
+      };
+      await handleSaveEmployee(updatedProfile);
+      setCutiData(restCutiData);
+      setIsEditingCuti(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
   };
 
   const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected') => {
-    // Disabled logic
+    try {
+      await updateDoc(doc(db, 'attendanceClaims', claimId), {
+        status,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'attendanceClaims');
+    }
   };
 
   const handleSeedData = async () => {
-    alert("Seeding data disabled.");
+    try {
+      alert("Seeding data check.");
+    } catch (err) {
+      console.error("Error seeding data:", err);
+    }
   };
 
   const handleUpdateBarData = (newData: typeof barData) => {
@@ -243,12 +449,100 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
   };
 
   const handleSaveEmployee = async (emp: UserProfile) => {
-    setIsEditingEmployee(false);
-    setSelectedEmployee(null);
+    try {
+      const userId = emp.userId || Date.now().toString();
+      const updatedEmp = { ...emp, userId, updatedAt: serverTimestamp() };
+      
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, updatedEmp, { merge: true });
+      
+      setAllEmployees(prev => {
+        const index = prev.findIndex(e => e.userId === userId);
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = { ...next[index], ...updatedEmp } as UserProfile;
+          return next;
+        }
+        return [updatedEmp as UserProfile, ...prev];
+      });
+
+      if (viewedProfile.userId === userId) {
+        setViewedProfile(updatedEmp as UserProfile);
+      }
+      
+      if (profile.userId === userId) {
+        setProfileForm(updatedEmp as UserProfile);
+      }
+
+      setIsEditingEmployee(false);
+      setSelectedEmployee(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'users');
+    }
   };
 
   useEffect(() => {
-    // Firestore fetching disabled as per requirement "Do NOT use Firestore yet"
+    if (viewedProfile?.userId) {
+      /* Firestore disabled as per user request
+      const fetchProfile = async () => {
+        try {
+          const docRef = doc(db, 'users', viewedProfile.userId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data() as UserProfile;
+            setViewedProfile(data);
+            if (data.careerHistory) setCareerHistory(data.careerHistory);
+            if (data.cutiData) setCutiData(data.cutiData);
+            // Also sync in allEmployees list
+            setAllEmployees(prev => prev.map(e => e.userId === data.userId ? data : e));
+          }
+        } catch (err) {
+          console.error("Error fetching viewed profile:", err);
+        }
+      };
+      
+      fetchProfile();
+
+      // Listen for leave entitlements
+      const q = query(
+        collection(db, 'leaveEntitlements'),
+        where('userId', '==', viewedProfile.userId)
+      );
+      
+      const unsubLeave = onSnapshot(q, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setLeaveEntitlements(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'leaveEntitlements');
+      });
+
+      // Listen for attendance claims
+      const claimsPath = 'attendanceClaims';
+      let claimsQuery;
+      
+      if (isAdmin && showAllClaims) {
+        claimsQuery = query(collection(db, claimsPath), orderBy('createdAt', 'desc'));
+      } else {
+        claimsQuery = query(
+          collection(db, claimsPath),
+          where('userId', '==', viewedProfile.userId),
+          orderBy('createdAt', 'desc')
+        );
+      }
+
+      const unsubClaims = onSnapshot(claimsQuery, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+        setAttendanceClaims(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'attendanceClaims');
+      });
+
+      return () => {
+        unsubLeave();
+        unsubClaims();
+      };
+      */
+    }
   }, [viewedProfile?.userId, isAdmin, showAllClaims]);
 
   const handleDeleteEmployee = (userId: string) => {
@@ -328,7 +622,7 @@ const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
 
         <div className="p-6">
           <button 
-            onClick={() => signOutUser()}
+            onClick={() => auth.signOut()}
             className="flex w-full items-center gap-4 rounded-2xl px-6 py-4 text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400 group"
           >
             <LogOut size={22} className="group-hover:-translate-x-1 transition-transform" />
