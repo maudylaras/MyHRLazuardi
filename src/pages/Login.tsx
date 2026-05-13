@@ -189,8 +189,25 @@ export default function Login({ onLogin }: LoginProps) {
 
               <button
                 type="button"
-                onClick={onLogin}
-                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95"
+                onClick={async () => {
+                  setError(null);
+                  setLoading(true);
+                  try {
+                    await onLogin();
+                  } catch (err: any) {
+                    if (err.code === 'auth/unauthorized-domain') {
+                      setError('This domain is not authorized. Please check Firebase Console.');
+                    } else if (err.code === 'auth/popup-closed-by-user') {
+                      setError('Sign-in popup closed. Please try again.');
+                    } else {
+                      setError('Terjadi kesalahan saat masuk dengan Google.');
+                    }
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95 disabled:opacity-50"
               >
                 <img src="https://www.google.com/favicon.ico" alt="Google" className="h-5 w-5" />
                 <span className="text-slate-700 uppercase tracking-widest group-hover:text-blue-700">Lanjutkan dengan Google</span>

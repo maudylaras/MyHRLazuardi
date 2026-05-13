@@ -33,6 +33,8 @@ export async function signInWithGoogle() {
       console.warn("Sign-in request already in progress.");
     } else if (error.code === 'auth/unauthorized-domain') {
       console.error("This domain is not authorized for Firebase Authentication. Please add it to your Firebase Console under Authentication > Settings > Authorized domains.");
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      console.warn("The sign-in popup was closed before completion. Please try again.");
     } else {
       console.error("Error signing in with Google", error);
     }
