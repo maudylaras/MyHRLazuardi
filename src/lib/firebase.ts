@@ -9,7 +9,15 @@ import {
   updateProfile,
   signOut
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAk31R8g0A9xOf4VwQvdOEhCxpo58K6hfQ",
+  authDomain: "myhrlazuardi.firebaseapp.com",
+  projectId: "myhrlazuardi",
+  storageBucket: "myhrlazuardi.firebasestorage.app",
+  messagingSenderId: "1086201788098",
+  appId: "1:1086201788098:web:629204dffa70b398f6ed5b"
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
