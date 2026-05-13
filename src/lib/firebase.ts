@@ -9,18 +9,12 @@ import {
   updateProfile,
   signOut
 } from 'firebase/auth';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAk31R8g0A9xOf4VwQvdOEhCxpo58K6hfQ",
-  authDomain: "myhrlazuardi.firebaseapp.com",
-  projectId: "myhrlazuardi",
-  storageBucket: "myhrlazuardi.firebasestorage.app",
-  messagingSenderId: "1086201788098",
-  appId: "1:1086201788098:web:629204dffa70b398f6ed5b"
-};
+import { getFirestore } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 
 let isSigningIn = false;
