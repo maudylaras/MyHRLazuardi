@@ -10,13 +10,13 @@ import {
   signOut
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 let isSigningIn = false;
 
@@ -31,6 +31,8 @@ export async function signInWithGoogle() {
       console.error("Popup blocked. Please allow popups for this site.");
     } else if (error.code === 'auth/cancelled-popup-request') {
       console.warn("Sign-in request already in progress.");
+    } else if (error.code === 'auth/unauthorized-domain') {
+      console.error("This domain is not authorized for Firebase Authentication. Please add it to your Firebase Console under Authentication > Settings > Authorized domains.");
     } else {
       console.error("Error signing in with Google", error);
     }

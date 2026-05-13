@@ -48,24 +48,6 @@ export default function Login({ onLogin }: LoginProps) {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      await onLogin();
-    } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Login dibatalkan. Silakan buka kembali jendela login untuk melanjutkan.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError('Domain aplikasi ini belum diizinkan oleh Firebase. Silakan hubungi admin.');
-      } else {
-        setError(err.message || 'Gagal masuk dengan Google.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-blue-600 p-6">
       <motion.div 
@@ -207,18 +189,11 @@ export default function Login({ onLogin }: LoginProps) {
 
               <button
                 type="button"
-                onClick={handleGoogleSignIn}
-                disabled={loading}
-                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95 disabled:opacity-50"
+                onClick={onLogin}
+                className="group flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-slate-100 bg-white py-4 text-xs font-black transition-all hover:border-blue-600 hover:bg-blue-50 active:scale-95"
               >
-                {loading ? (
-                  <Loader2 className="animate-spin text-blue-600" size={20} />
-                ) : (
-                  <>
-                    <img src="https://www.google.com/favicon.ico" alt="Google" className="h-5 w-5" />
-                    <span className="text-slate-700 uppercase tracking-widest group-hover:text-blue-700">Lanjutkan dengan Google</span>
-                  </>
-                )}
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="h-5 w-5" />
+                <span className="text-slate-700 uppercase tracking-widest group-hover:text-blue-700">Lanjutkan dengan Google</span>
               </button>
             </div>
           ) : (
