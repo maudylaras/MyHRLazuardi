@@ -1,64 +1,50 @@
 export interface UserProfile {
   userId: string;
-  name: string;
-  email: string;
-  role: 'employee' | 'admin';
-  photoUrl?: string;
   niy?: string;
-  position?: string;
-  unit?: string;
+  name: string;
   nik?: string;
   bpjs?: string;
+  email: string;
+  npwp?: string;
+  unit?: string;
+  position?: string;
+  contractStatus?: string;
+  entryDate?: string;
   gender?: string;
   birthPlace?: string;
   birthDate?: string;
-  phone?: string;
-  maritalStatus?: string;
   educationLevel?: string;
   education?: string;
   address?: string;
-  contractStatus?: string;
+  phone?: string;
+  maritalStatus?: string;
+  role: 'employee' | 'admin';
+  photoUrl?: string;
   idpLink?: string;
-  entryDate?: string;
-  createdAt: string;
-  updatedAt?: any;
+  emergencyContact?: {
+    name: string;
+    relationship: string;
+    phone: string;
+  };
   careerHistory?: CareerHistory[];
-  longServiceLeave?: {
-    id?: string;
-    cycleNumber: number;
-    dateObtained: string;
-    status: string;
-  }[];
-}
-
-export interface AttendanceRecord {
-  id: string;
-  userId: string;
-  date: string;
-  checkIn: string;
-  checkOut?: string;
-  status: string;
-}
-
-export interface LeaveEntitlement {
-  id: string;
-  type: string;
-  balance: number;
-  total: number;
+  cutiData?: { tahunan: number; besar: number };
+  longServiceLeave?: LongServiceCycle[];
+  createdAt: string;
 }
 
 export interface RegulationItem {
   id: string;
   title: string;
   description: string;
-  iconType: 'check' | 'alert';
+  iconType: 'alert' | 'check';
 }
 
 export interface RegulationCategory {
   id: string;
   title: string;
-  order: number;
+  description?: string;
   items: RegulationItem[];
+  order: number;
 }
 
 export interface FaqItem {
@@ -70,68 +56,76 @@ export interface FaqItem {
 export interface FaqCategory {
   id: string;
   title: string;
-  order: number;
   items: FaqItem[];
+  order: number;
 }
 
-export interface PersonalData {
-  id?: string;
-  namaLengkap: string;
-  niy: string;
-  jabatan: string;
-  unit: string;
-  emailOfficial: string;
-  telepon: string;
-  nik: string;
-  npwp: string;
-  gender: string;
-  statusKawin: string;
-  tempatLahir: string;
-  tanggalLahir: string;
-  alamatLengkap: string;
-  tingkatPendidikan: string;
-  institusiJurusan: string;
-  statusKontrak: string;
-  tanggalMasuk: string;
-  bpjsNomor: string;
-  idpLink: string;
-  aksesLevel: string;
-  createdAt: any;
-  updatedAt: any;
-}
-
-export interface ContactData {
-  id?: string;
-  namaKontak: string;
-  hubungan: string;
-  nomorHp: string;
-  emergencyContact: boolean;
-  updatedAt: any;
+export interface LongServiceCycle {
+  id: string;
+  cycleNumber: number;
+  dateObtained: string;
+  status: 'obtained' | 'upcoming' | 'available' | 'claimed' | 'expired';
 }
 
 export interface CareerHistory {
   id?: string;
+  userId?: string;
   period: string;
   position: string;
   unit: string;
   active?: boolean;
-  createdAt?: any;
+  description?: string;
+}
+
+export interface LeaveEntitlement {
+  userId: string;
+  type: 'Annual' | 'Big Leave';
+  totalDays: number;
+  usedDays: number;
+  availableDays: number;
+  lastGrantDate: string;
+  nextGrantDate: string;
 }
 
 export interface AttendanceClaim {
-  id?: string;
-  reason: string;
+  id: string;
+  userId: string;
+  userName: string;
   date: string;
+  reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  gformLink: string;
-  createdAt: any;
+  createdAt: string;
+}
+
+export interface AttendanceRecord {
+  id?: string;
+  userId: string;
+  date: string; // YYYY-MM-DD
+  checkIn?: {
+    time: any; // Firestore Timestamp
+    location: {
+      lat: number;
+      lng: number;
+    };
+    address?: string;
+  };
+  checkOut?: {
+    time: any; // Firestore Timestamp
+    location: {
+      lat: number;
+      lng: number;
+    };
+    address?: string;
+  };
+  status: 'present' | 'late' | 'absent';
+  notes?: string;
 }
 
 export interface Certification {
-  id?: string;
-  certificationName: string;
-  certificationDate: string;
-  certificateFileName?: string;
-  certificateFileUrl?: string;
-  createdAt: any;
+  id: string;
+  userId: string;
+  name: string;
+  date: string;
+  photoUrl?: string;
+  createdAt: string;
 }

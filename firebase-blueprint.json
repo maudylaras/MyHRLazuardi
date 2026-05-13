@@ -34,65 +34,23 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "certificationName": { "type": "string" },
-        "certificationDate": { "type": "string" },
-        "certificateFileUrl": { "type": "string" },
-        "certificateFileName": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string", "description": "Nama sertifikasi" },
+        "date": { "type": "string", "format": "date", "description": "Tanggal sertifikasi" },
+        "photoUrl": { "type": "string", "description": "Foto sertifikat" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["certificationName", "certificationDate"]
-    },
-    "PersonalData": {
-      "title": "Personal Data",
-      "description": "Detailed personal information.",
-      "type": "object",
-      "properties": {
-        "namaLengkap": { "type": "string" },
-        "niy": { "type": "string" },
-        "jabatan": { "type": "string" },
-        "unit": { "type": "string" },
-        "emailOfficial": { "type": "string" },
-        "telepon": { "type": "string" },
-        "nik": { "type": "string" },
-        "npwp": { "type": "string" },
-        "gender": { "type": "string" },
-        "statusKawin": { "type": "string" },
-        "tempatLahir": { "type": "string" },
-        "tanggalLahir": { "type": "string" },
-        "alamatLengkap": { "type": "string" },
-        "tingkatPendidikan": { "type": "string" },
-        "institusiJurusan": { "type": "string" },
-        "statusKontrak": { "type": "string" },
-        "tanggalMasuk": { "type": "string" },
-        "bpjsNomor": { "type": "string" },
-        "idpLink": { "type": "string" },
-        "aksesLevel": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "ContactData": {
-      "title": "Contact Data",
-      "description": "Emergency and contact information.",
-      "type": "object",
-      "properties": {
-        "namaKontak": { "type": "string" },
-        "hubungan": { "type": "string" },
-        "nomorHp": { "type": "string" },
-        "emergencyContact": { "type": "boolean" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
+      "required": ["userId", "name", "date"]
     },
     "CareerHistory": {
       "title": "Career History",
       "description": "Employee career progression log.",
       "type": "object",
       "properties": {
+        "userId": { "type": "string" },
         "period": { "type": "string" },
         "position": { "type": "string" },
-        "unit": { "type": "string" },
-        "active": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "unit": { "type": "string" }
       }
     },
     "LeaveEntitlement": {
@@ -110,11 +68,11 @@
       "description": "Requests for attendance correction.",
       "type": "object",
       "properties": {
-        "reason": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
         "date": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "gformLink": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
       }
     },
     "Attendance": {
@@ -124,9 +82,36 @@
       "properties": {
         "userId": { "type": "string" },
         "date": { "type": "string", "format": "date" },
-        "checkIn": { "type": "string" },
-        "checkOut": { "type": "string" },
-        "status": { "type": "string" }
+        "checkIn": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "checkOut": {
+          "type": "object",
+          "properties": {
+            "time": { "type": "string", "format": "date-time" },
+            "location": {
+              "type": "object",
+              "properties": {
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+              }
+            },
+            "address": { "type": "string" }
+          }
+        },
+        "status": { "type": "string", "enum": ["present", "late", "absent"] },
+        "notes": { "type": "string" }
       },
       "required": ["userId", "date"]
     },
@@ -179,25 +164,9 @@
       "schema": "User",
       "description": "User profile documents."
     },
-    "users/{userId}/personalData/{dataId}": {
-      "schema": "PersonalData",
-      "description": "Detailed personal information sub-collection."
-    },
-    "users/{userId}/contactData/{dataId}": {
-      "schema": "ContactData",
-      "description": "Emergency and contact information sub-collection."
-    },
-    "users/{userId}/careerHistory/{historyId}": {
-      "schema": "CareerHistory",
-      "description": "Employee career progression log sub-collection."
-    },
-    "users/{userId}/certifications/{certId}": {
+    "certifications/{certId}": {
       "schema": "Certification",
-      "description": "Employee certifications sub-collection."
-    },
-    "users/{userId}/attendanceClaims/{claimId}": {
-      "schema": "AttendanceClaim",
-      "description": "Requests for attendance correction sub-collection."
+      "description": "Employee certifications."
     },
     "attendance/{attendanceId}": {
       "schema": "Attendance",
