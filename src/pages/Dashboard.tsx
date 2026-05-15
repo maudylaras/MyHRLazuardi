@@ -342,7 +342,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   };
 
   const handleDeleteCertification = async (id: string) => {
-    if (!confirm('Hapus sertifikasi ini?')) return;
+    if (!confirm('Hapus sertifikat ini?')) return;
     try {
       await deleteDoc(doc(db, 'certifications', id));
     } catch (err) {
@@ -615,7 +615,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           <SidebarItem id="karir" icon={<Trophy size={22} />} label="Progress Karir" />
           <SidebarItem id="cuti" icon={<Calendar size={22} />} label="Cuti Besar" />
           <SidebarItem id="klaim" icon={<Fingerprint size={22} />} label="Klaim Absensi" />
-          <SidebarItem id="certification" icon={<Award size={22} />} label="Sertifikasi" />
+          <SidebarItem id="certification" icon={<Award size={22} />} label="Sertifikat" />
           <SidebarItem id="regulasi" icon={<BookOpen size={22} />} label="Regulasi" />
           <SidebarItem id="faq" icon={<HelpCircle size={22} />} label="Pusat Bantuan" />
         </nav>
@@ -642,7 +642,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                activeTab === 'cuti' ? 'Cuti Besar' : 
                activeTab === 'regulasi' ? 'Regulasi & Kebijakan' : 
                activeTab === 'faq' ? 'Pusat Bantuan' : 
-               activeTab === 'certification' ? 'Sertifikasi Saya' : 'Dashboard Hub'}
+               activeTab === 'certification' ? 'Sertifikat Saya' : 'Dashboard Hub'}
             </h2>
           </div>
           
@@ -1194,6 +1194,10 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                     <EmergencyCard label="Hubungan" value={viewedProfile.emergencyContact?.relationship || '-'} />
                     <EmergencyCard label="Nomor HP" value={viewedProfile.emergencyContact?.phone || '-'} />
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-50">
+                    <EmergencyCard label="Alamat Domisili" value={viewedProfile.domicileAddress || '-'} />
+                    <EmergencyCard label="Alamat Tinggal" value={viewedProfile.residentialAddress || '-'} />
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1565,14 +1569,24 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                       <p className="text-indigo-100 text-lg font-medium leading-relaxed opacity-80">
                         Akses portal resmi untuk meninjau seluruh peraturan, kebijakan, tata tertib, dan regulasi ketenagakerjaan di lingkungan Lazuardi.
                       </p>
-                      <a 
-                        href="https://sites.google.com/lazuardi.sch.id/tugas-hrd-peraturan/unser-1"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-3 px-10 py-5 bg-white text-indigo-600 font-black text-sm uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-900/20 hover:scale-105 transition-all"
-                      >
-                         Buka Portal Peraturan <ExternalLink size={20} />
-                      </a>
+                      <div className="flex flex-wrap items-center gap-4">
+                        <a 
+                          href="https://sites.google.com/lazuardi.sch.id/tugas-hrd-peraturan/unser-1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-3 px-10 py-5 bg-white text-indigo-600 font-black text-sm uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-900/20 hover:scale-105 transition-all"
+                        >
+                           Buka Portal Peraturan <ExternalLink size={20} />
+                        </a>
+                        <a 
+                          href="https://sites.google.com/lazuardi.sch.id/internal-memo"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-3 px-10 py-5 bg-white/10 hover:bg-white/20 text-white font-black text-sm uppercase tracking-widest rounded-2xl border border-white/20 backdrop-blur-sm transition-all"
+                        >
+                           Internal Memo <ExternalLink size={20} />
+                        </a>
+                      </div>
                    </div>
                 </div>
 
@@ -1645,14 +1659,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
               >
                 <div className="flex items-center justify-between">
                   <div className="space-y-2 text-left">
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Sertifikasi & Lisensi</h3>
-                    <p className="text-sm font-medium text-slate-400 italic">Daftar sertifikasi profesional yang Anda miliki.</p>
+                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Sertifikat dan Penghargaan</h3>
+                    <p className="text-sm font-medium text-slate-400 italic">Daftar sertifikat dan penghargaan profesional yang Anda miliki.</p>
                   </div>
                   <button 
                     onClick={() => { setSelectedCertification(null); setIsEditingCertification(true); }}
                     className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-100 hover:scale-105 active:scale-95 transition-all"
                   >
-                    <Plus size={18} /> Tambah Sertifikasi
+                    <Plus size={18} /> Tambah Sertifikat
                   </button>
                 </div>
 
@@ -1662,8 +1676,8 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                       <Award size={48} />
                     </div>
                     <div className="space-y-2">
-                      <p className="text-xl font-bold text-slate-900">Belum ada sertifikasi</p>
-                      <p className="text-sm text-slate-400 max-w-sm">Anda belum menambahkan sertifikasi apapun. Klik tombol di atas untuk memulai.</p>
+                      <p className="text-xl font-bold text-slate-900">Belum ada sertifikat</p>
+                      <p className="text-sm text-slate-400 max-w-sm">Anda belum menambahkan sertifikat apapun. Klik tombol di atas untuk memulai.</p>
                     </div>
                   </div>
                 ) : (
@@ -2313,11 +2327,15 @@ function EditEmployeeModal({ isOpen, onClose, employee, onSave }: any) {
 
         {/* Emergency Contact */}
         <div className="space-y-6">
-          <h5 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] border-b border-slate-100 pb-3">Kontak Darurat</h5>
+          <h5 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] border-b border-slate-100 pb-3">Kontak Darurat & Alamat</h5>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input label="Nama Kontak" value={form.emergencyContact?.name} onChange={(v) => setForm({...form, emergencyContact: { ...form.emergencyContact, name: v }})} />
             <Input label="Hubungan" value={form.emergencyContact?.relationship} onChange={(v) => setForm({...form, emergencyContact: { ...form.emergencyContact, relationship: v }})} />
             <Input label="Nomor HP" value={form.emergencyContact?.phone} onChange={(v) => setForm({...form, emergencyContact: { ...form.emergencyContact, phone: v }})} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input label="Alamat Domisili" value={form.domicileAddress || ''} onChange={(v) => setForm({...form, domicileAddress: v})} />
+            <Input label="Alamat Tinggal" value={form.residentialAddress || ''} onChange={(v) => setForm({...form, residentialAddress: v})} />
           </div>
         </div>
 
@@ -2394,7 +2412,7 @@ function EmergencyCard({ label, value }: { label: string, value: string }) {
   return (
     <div className="bg-slate-50/50 p-7 rounded-[32px] border border-slate-100/50 shadow-sm">
       <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-2">{label}</p>
-      <p className="text-lg font-black text-slate-900 tracking-tight truncate">{value}</p>
+      <p className="text-lg font-black text-slate-900 tracking-tight break-words">{value}</p>
     </div>
   );
 }
@@ -2552,11 +2570,11 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Sertifikasi" : "Tambah Sertifikasi"}>
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Sertifikat" : "Tambah Sertifikat"}>
       <div className="space-y-6 text-left">
-        <Input label="Nama Sertifikasi" value={form.name || ''} onChange={(v) => setForm({...form, name: v})} />
+        <Input label="Nama Sertifikat" value={form.name || ''} onChange={(v) => setForm({...form, name: v})} />
         <div className="space-y-1.5 flex-1">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanggal Sertifikasi</label>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tanggal Sertifikat</label>
           <input 
             type="date" 
             value={form.date || ''} 
@@ -2596,7 +2614,7 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
           }} 
           className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all"
         >
-          SIMPAN SERTIFIKASI
+          SIMPAN SERTIFIKAT
         </button>
       </div>
     </Modal>

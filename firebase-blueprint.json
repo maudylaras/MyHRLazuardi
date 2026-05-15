@@ -24,6 +24,8 @@
         "birthDate": { "type": "string" },
         "education": { "type": "string" },
         "phone": { "type": "string" },
+        "domicileAddress": { "type": "string" },
+        "residentialAddress": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name", "email", "role"]

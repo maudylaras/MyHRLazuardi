@@ -17,19 +17,21 @@ export default function App() {
       
       if (firebaseUser) {
         // Authenticate only - Bypass Firestore storage/retrieval as per requirements
+        const isAdminUser = firebaseUser.email === 'maudy@lazuardi.sch.id' || firebaseUser.email === 'hrd@lazuardi.sch.id';
         const isMaudy = firebaseUser.email === 'maudy@lazuardi.sch.id';
+        const isHRD = firebaseUser.email === 'hrd@lazuardi.sch.id';
         
         const currentProfile: UserProfile = {
           userId: firebaseUser.uid,
-          name: firebaseUser.displayName || (isMaudy ? "Maudy Larasati.,S.Psi." : 'User'),
+          name: firebaseUser.displayName || (isMaudy ? "Maudy Larasati.,S.Psi." : (isHRD ? "HRD Lazuardi" : 'User')),
           email: firebaseUser.email || '',
-          role: isMaudy ? 'admin' : 'employee',
+          role: isAdminUser ? 'admin' : 'employee',
           photoUrl: firebaseUser.photoURL || '',
           createdAt: new Date().toISOString(),
           niy: isMaudy ? "10.25.818" : "",
           nik: isMaudy ? "3276105508020001" : "",
           unit: "Lazuardi",
-          position: isMaudy ? "Staf HRD" : "Staf",
+          position: isAdminUser ? "Staf HRD" : "Staf",
           contractStatus: "Full Time",
           entryDate: isMaudy ? "06-Jan-25" : "01-Jan-26",
           gender: isMaudy ? "Pr." : "",

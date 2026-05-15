@@ -197,8 +197,9 @@ export default function Login({ onLogin }: LoginProps) {
           )}
         </div>
 
-        <div className="pt-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-          &copy; 2026 MyHR Lazuardi. Powered by HR Connect Pro.
+        <div className="pt-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] flex flex-col gap-1">
+          <span>&copy; 2026 MyHR Lazuardi. Powered by HR Connect Pro.</span>
+          <span className="text-slate-400">Administrator: maudy@lazuardi.sch.id</span>
         </div>
       </motion.div>
     </div>

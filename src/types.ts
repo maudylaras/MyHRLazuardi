@@ -18,6 +18,8 @@ export interface UserProfile {
   address?: string;
   phone?: string;
   maritalStatus?: string;
+  domicileAddress?: string;
+  residentialAddress?: string;
   role: 'employee' | 'admin';
   photoUrl?: string;
   idpLink?: string;
