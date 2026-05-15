@@ -28,7 +28,8 @@ import {
   orderBy, 
   limit, 
   onSnapshot,
-  serverTimestamp 
+  serverTimestamp,
+  collectionGroup
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -70,7 +71,8 @@ import {
   Star,
   Edit3,
   Plane,
-  ChevronUp
+  ChevronUp,
+  Loader2
 } from 'lucide-react';
 import { cn, formatDate, formatTime } from '../lib/utils';
 import { 
@@ -114,8 +116,6 @@ const AREA_DATA = [
 export default function Dashboard({ user, profile }: DashboardProps) {
   const isAdmin = profile.role === 'admin';
   const [now, setNow] = useState(new Date());
-  const [attendance, setAttendance] = useState<AttendanceRecord | null>(null);
-  const [logs, setLogs] = useState<AttendanceRecord[]>([]);
   const [barData, setBarData] = useState(BAR_DATA);
   const [areaData, setAreaData] = useState(AREA_DATA);
   const [isEditingBar, setIsEditingBar] = useState(false);
@@ -126,6 +126,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [viewedProfile, setViewedProfile] = useState<UserProfile>(profile);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isAdminHub, setIsAdminHub] = useState(isAdmin);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Initial loading simulation or actual wait for listeners
+    const timer = setTimeout(() => setLoading(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [allEmployees, setAllEmployees] = useState<UserProfile[]>(ALL_EMPLOYEES);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
@@ -168,185 +176,232 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    /* Firestore disabled as per user request
-    const unsubReg = onSnapshot(collection(db, 'regulations'), (snap) => {
-      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegulationCategory));
-      setRegulationCategories(cats.sort((a, b) => a.order - b.order));
+    // Listen for regulation categories
+    const qReg = query(collection(db, 'policyCategories'), orderBy('createdAt', 'asc'));
+    const unsubReg = onSnapshot(qReg, async (snap) => {
+      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      // Fetch items for each category
+      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+        const itemSnap = await getDocs(query(collection(db, 'policyItems'), where('categoryId', '==', cat.id)));
+        return {
+          ...cat,
+          title: cat.name,
+          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        } as RegulationCategory;
+      }));
+      
+      setRegulationCategories(categoriesWithItems);
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'regulations');
+      handleFirestoreError(err, OperationType.LIST, 'policyCategories');
     });
     
-    const unsubFaq = onSnapshot(collection(db, 'helpCenter'), (snap) => {
-      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as FaqCategory));
-      setFaqCategories(cats.sort((a, b) => a.order - b.order));
+    // Listen for help categories
+    const qHelp = query(collection(db, 'helpCategories'), orderBy('createdAt', 'asc'));
+    const unsubFaq = onSnapshot(qHelp, async (snap) => {
+      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+        const itemSnap = await getDocs(query(collection(db, 'faqItems'), where('categoryId', '==', cat.id)));
+        return {
+          ...cat,
+          title: cat.name,
+          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        } as FaqCategory;
+      }));
+      
+      setFaqCategories(categoriesWithItems);
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'helpCenter');
+      handleFirestoreError(err, OperationType.LIST, 'helpCategories');
     });
 
-    const unsubCert = onSnapshot(query(collection(db, 'certifications'), where('userId', '==', profile.userId)), (snap) => {
-      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
-      setCertifications(certs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'certifications');
-    });
+    // Listen for all employees if admin
+    let unsubEmployees: () => void = () => {};
+    if (isAdmin) {
+      unsubEmployees = onSnapshot(collection(db, 'users'), (snap) => {
+        const employees = snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile));
+        setAllEmployees(employees);
+      });
+    }
 
     return () => {
       unsubReg();
       unsubFaq();
-      unsubCert();
+      unsubEmployees();
     };
-    */
-  }, []);
+  }, [isAdmin]);
+
+  // Listen for specific data when viewedProfile changes
+  useEffect(() => {
+    if (!viewedProfile?.userId) return;
+
+    // Certificates
+    const qCert = query(collection(db, `users/${viewedProfile.userId}/certificates`), orderBy('createdAt', 'desc'));
+    const unsubCert = onSnapshot(qCert, (snap) => {
+      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
+      setCertifications(certs);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'certificates');
+    });
+
+    // Career Progress
+    const qCareer = query(collection(db, `users/${viewedProfile.userId}/careerProgress`), orderBy('order', 'asc'));
+    const unsubCareer = onSnapshot(qCareer, (snap) => {
+      const career = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CareerHistory));
+      setCareerHistory(career);
+    });
+
+    // Leave Cycles
+    const qLeave = query(collection(db, `users/${viewedProfile.userId}/leaveCycles`), orderBy('createdAt', 'asc'));
+    const unsubLeave = onSnapshot(qLeave, (snap) => {
+      const leave = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      setLeaveEntitlements(leave);
+    });
+
+    // Attendance Claims
+    let qClaims;
+    if (isAdmin && showAllClaims) {
+      qClaims = query(collectionGroup(db, 'attendanceClaims'), orderBy('createdAt', 'desc'));
+    } else {
+      qClaims = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
+    }
+    
+    // Note: collectionGroup requires an index. If it fails, fallback to simple query or single user view.
+    const unsubClaims = onSnapshot(qClaims, (snap) => {
+      const claims = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+      setAttendanceClaims(claims);
+    }, (err) => {
+      // Fallback if collectionGroup index is missing
+      if (err.message.includes('index')) {
+        console.warn('CollectionGroup index missing for attendanceClaims');
+      }
+    });
+
+    return () => {
+      unsubCert();
+      unsubCareer();
+      unsubLeave();
+      unsubClaims();
+    };
+  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
+
+  // Sync profileForm when viewedProfile changes
+  useEffect(() => {
+    if (viewedProfile) {
+      setProfileForm(viewedProfile);
+    }
+  }, [viewedProfile]);
 
   const handleSaveRegCategory = async (cat: Partial<RegulationCategory>) => {
     try {
-      const id = cat.id || `reg_cat_${Date.now()}`;
-      await setDoc(doc(db, 'regulations', id), {
-        ...cat,
-        id,
-        items: cat.items || [],
-        order: cat.order || regulationCategories.length,
-        updatedAt: serverTimestamp()
+      const id = cat.id || doc(collection(db, 'policyCategories')).id;
+      await setDoc(doc(db, 'policyCategories', id), {
+        name: cat.title,
+        description: cat.description || '',
+        createdAt: serverTimestamp()
       }, { merge: true });
       setIsEditingRegCategory(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+      handleFirestoreError(err, OperationType.UPDATE, 'policyCategories');
     }
   };
 
   const handleDeleteRegCategory = async (id: string) => {
     if (!confirm('Hapus kategori regulasi?')) return;
     try {
-      await deleteDoc(doc(db, 'regulations', id));
+      await deleteDoc(doc(db, 'policyCategories', id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'regulations');
+      handleFirestoreError(err, OperationType.DELETE, 'policyCategories');
     }
   };
 
   const handleSaveRegItem = async (categoryId: string, item: Partial<RegulationItem>) => {
     try {
-      const cat = regulationCategories.find(c => c.id === categoryId);
-      if (!cat) return;
-      
-      let newItems = [...(cat.items || [])];
-      const itemId = item.id || `item_${Date.now()}`;
-      const itemIndex = newItems.findIndex(i => i.id === itemId);
-      
-      const newItem = { ...item, id: itemId } as RegulationItem;
-      
-      if (itemIndex >= 0) {
-        newItems[itemIndex] = newItem;
-      } else {
-        newItems.push(newItem);
-      }
-      
-      await updateDoc(doc(db, 'regulations', categoryId), {
-        items: newItems,
-        updatedAt: serverTimestamp()
-      });
+      const id = item.id || doc(collection(db, 'policyItems')).id;
+      await setDoc(doc(db, 'policyItems', id), {
+        ...item,
+        categoryId,
+        createdAt: serverTimestamp()
+      }, { merge: true });
       setIsEditingRegItem(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+      handleFirestoreError(err, OperationType.UPDATE, 'policyItems');
     }
   };
 
   const handleDeleteRegItem = async (categoryId: string, itemId: string) => {
     if (!confirm('Hapus item regulasi?')) return;
     try {
-      const cat = regulationCategories.find(c => c.id === categoryId);
-      if (!cat) return;
-      const newItems = cat.items.filter(i => i.id !== itemId);
-      await updateDoc(doc(db, 'regulations', categoryId), { items: newItems });
+      await deleteDoc(doc(db, 'policyItems', itemId));
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'regulations');
+      handleFirestoreError(err, OperationType.DELETE, 'policyItems');
     }
   };
 
   const handleSaveFaqCategory = async (cat: Partial<FaqCategory>) => {
     try {
-      const id = cat.id || `faq_cat_${Date.now()}`;
-      await setDoc(doc(db, 'helpCenter', id), {
-        ...cat,
-        id,
-        items: cat.items || [],
-        order: cat.order || faqCategories.length,
-        updatedAt: serverTimestamp()
+      const id = cat.id || doc(collection(db, 'helpCategories')).id;
+      await setDoc(doc(db, 'helpCategories', id), {
+        name: cat.title,
+        createdAt: serverTimestamp()
       }, { merge: true });
       setIsEditingFaqCategory(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+      handleFirestoreError(err, OperationType.UPDATE, 'helpCategories');
     }
   };
 
   const handleDeleteFaqCategory = async (id: string) => {
     if (!confirm('Hapus kategori FAQ?')) return;
     try {
-      await deleteDoc(doc(db, 'helpCenter', id));
+      await deleteDoc(doc(db, 'helpCategories', id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'helpCenter');
+      handleFirestoreError(err, OperationType.DELETE, 'helpCategories');
     }
   };
 
   const handleSaveFaqItem = async (categoryId: string, item: Partial<FaqItem>) => {
     try {
-      const cat = faqCategories.find(c => c.id === categoryId);
-      if (!cat) return;
-      
-      let newItems = [...(cat.items || [])];
-      const itemId = item.id || `faq_item_${Date.now()}`;
-      const itemIndex = newItems.findIndex(i => i.id === itemId);
-      
-      const newItem = { ...item, id: itemId } as FaqItem;
-      
-      if (itemIndex >= 0) {
-        newItems[itemIndex] = newItem;
-      } else {
-        newItems.push(newItem);
-      }
-      
-      await updateDoc(doc(db, 'helpCenter', categoryId), {
-        items: newItems,
-        updatedAt: serverTimestamp()
-      });
+      const id = item.id || doc(collection(db, 'faqItems')).id;
+      await setDoc(doc(db, 'faqItems', id), {
+        ...item,
+        categoryId,
+        createdAt: serverTimestamp()
+      }, { merge: true });
       setIsEditingFaqItem(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+      handleFirestoreError(err, OperationType.UPDATE, 'faqItems');
     }
   };
 
   const handleDeleteFaqItem = async (categoryId: string, itemId: string) => {
     if (!confirm('Hapus item FAQ?')) return;
     try {
-      const cat = faqCategories.find(c => c.id === categoryId);
-      if (!cat) return;
-      const newItems = cat.items.filter(i => i.id !== itemId);
-      await updateDoc(doc(db, 'helpCenter', categoryId), { items: newItems });
+      await deleteDoc(doc(db, 'faqItems', itemId));
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'helpCenter');
+      handleFirestoreError(err, OperationType.DELETE, 'faqItems');
     }
   };
 
   const handleSaveCertification = async (cert: Partial<Certification>) => {
     try {
-      const id = cert.id || `cert_${Date.now()}`;
-      await setDoc(doc(db, 'certifications', id), {
+      const id = cert.id || doc(collection(db, `users/${viewedProfile.userId}/certificates`)).id;
+      await setDoc(doc(db, `users/${viewedProfile.userId}/certificates`, id), {
         ...cert,
-        id,
-        userId: profile.userId,
-        createdAt: cert.createdAt || new Date().toISOString()
+        createdAt: cert.createdAt || serverTimestamp()
       }, { merge: true });
       setIsEditingCertification(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'certifications');
+      handleFirestoreError(err, OperationType.WRITE, 'certificates');
     }
   };
 
   const handleDeleteCertification = async (id: string) => {
     if (!confirm('Hapus sertifikat ini?')) return;
     try {
-      await deleteDoc(doc(db, 'certifications', id));
+      await deleteDoc(doc(db, `users/${viewedProfile.userId}/certificates`, id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'certifications');
+      handleFirestoreError(err, OperationType.DELETE, 'certificates');
     }
   };
 
@@ -394,9 +449,27 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
   const handleSaveCareer = async (newHistory: CareerHistory[]) => {
     try {
-      const updatedProfile = { ...viewedProfile, careerHistory: newHistory };
-      await handleSaveEmployee(updatedProfile);
-      setCareerHistory(newHistory);
+      const subCollRef = collection(db, `users/${viewedProfile.userId}/careerProgress`);
+      const existingDocs = await getDocs(subCollRef);
+      const existingIds = existingDocs.docs.map(d => d.id);
+      const newIds = newHistory.map(h => h.id).filter(Boolean) as string[];
+      
+      for (const oldId of existingIds) {
+        if (!newIds.includes(oldId)) {
+          await deleteDoc(doc(db, `users/${viewedProfile.userId}/careerProgress`, oldId));
+        }
+      }
+      
+      for (let i = 0; i < newHistory.length; i++) {
+        const item = newHistory[i];
+        const id = item.id || doc(subCollRef).id;
+        await setDoc(doc(db, `users/${viewedProfile.userId}/careerProgress`, id), {
+          ...item,
+          order: i,
+          userId: viewedProfile.userId,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
       setIsEditingCareer(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'users');
@@ -406,13 +479,21 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const handleSaveCuti = async (newData: any) => {
     try {
       const { longServiceLeave, ...restCutiData } = newData;
-      const updatedProfile = { 
-        ...viewedProfile, 
+      await updateDoc(doc(db, 'users', viewedProfile.userId), { 
         cutiData: restCutiData,
-        longServiceLeave: longServiceLeave 
-      };
-      await handleSaveEmployee(updatedProfile);
-      setCutiData(restCutiData);
+        updatedAt: serverTimestamp()
+      });
+      
+      if (longServiceLeave) {
+        const subCollRef = collection(db, `users/${viewedProfile.userId}/leaveCycles`);
+        for (const cycle of longServiceLeave) {
+          const id = cycle.id || doc(subCollRef).id;
+          await setDoc(doc(db, `users/${viewedProfile.userId}/leaveCycles`, id), {
+            ...cycle,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+      }
       setIsEditingCuti(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'users');
@@ -431,10 +512,54 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   };
 
   const handleSeedData = async () => {
+    if (!isAdmin) return;
+    if (!confirm('Ingin mengisi data sampel untuk testing?')) return;
     try {
-      alert("Seeding data check.");
+      // Seed Policy Categories
+      const cats = [
+        { name: 'Keamanan Data', desc: 'Aturan penggunaan sistem dan data' },
+        { name: 'Kebijakan Cuti', desc: 'Ketentuan cuti tahunan dan besar' },
+        { name: 'Etika Kerja', desc: 'Standar perilaku di lingkungan sekolah' }
+      ];
+      for (const cat of cats) {
+        const id = doc(collection(db, 'policyCategories')).id;
+        await setDoc(doc(db, 'policyCategories', id), { 
+          name: cat.name, 
+          description: cat.desc,
+          createdAt: serverTimestamp() 
+        });
+        
+        // Add 2 items per category
+        for (let i = 1; i <= 2; i++) {
+          await setDoc(doc(collection(db, 'policyItems')), {
+            categoryId: id,
+            title: `${cat.name} Rule #${i}`,
+            description: `Deksripsi lengkap mengenai kebijakan ${cat.name} bagian ${i}. Harap dibaca dan dipahami.`,
+            iconType: i % 2 === 0 ? 'check' : 'alert',
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      // Seed FAQ
+      const faqCats = ['Sistem MyHR', 'Payroll & Benefit', 'Fasilitas'];
+      for (const catName of faqCats) {
+        const id = doc(collection(db, 'helpCategories')).id;
+        await setDoc(doc(db, 'helpCategories', id), { name: catName, createdAt: serverTimestamp() });
+        for (let i = 1; i <= 2; i++) {
+          await setDoc(doc(collection(db, 'faqItems')), {
+            categoryId: id,
+            question: `Bagaimana cara kerja ${catName} bagian ${i}?`,
+            answer: `Ini adalah panduan lengkap mengenai ${catName}. Anda dapat melihat detailnya di menu yang tersedia atau menghubungi admin jika ada kendala.`,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      alert('Data sampel berhasil dibuat! Dashboard akan terupdate otomatis via real-time listener.');
     } catch (err) {
       console.error("Error seeding data:", err);
+      alert('Gagal membuat data sampel. Cek console.');
     }
   };
 
@@ -545,8 +670,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     }
   }, [viewedProfile?.userId, isAdmin, showAllClaims]);
 
-  const handleDeleteEmployee = (userId: string) => {
-    setAllEmployees(prev => prev.filter(e => e.userId !== userId));
+  const handleDeleteEmployee = async (userId: string) => {
+    if (!confirm('Hapus data karyawan ini secara permanen?')) return;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      // State will update via onSnapshot listener in App.tsx or local listener
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'users');
+    }
   };
   
   // Search logic for Admin
@@ -597,6 +728,17 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       <span className="font-semibold text-sm tracking-tight">{label}</span>
     </button>
   );
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-white">
+         <div className="flex flex-col items-center gap-6">
+            <Loader2 size={48} className="animate-spin text-indigo-600" />
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Menyiapkan Dashboard Anda...</p>
+         </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -954,9 +1096,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                           <UserPlus size={22} />
                           Tambah Karyawan
                         </button>
-                        <button className="flex items-center justify-center gap-4 w-full bg-white border border-slate-100 text-slate-400 font-black uppercase text-xs tracking-widest py-7 rounded-[36px] shadow-sm hover:text-indigo-600 hover:bg-indigo-50 hover:scale-[1.02] active:scale-95 transition-all">
+                        <button 
+                          onClick={handleSeedData}
+                          className="flex items-center justify-center gap-4 w-full bg-white border border-slate-100 text-slate-400 font-black uppercase text-xs tracking-widest py-7 rounded-[36px] shadow-sm hover:text-indigo-600 hover:bg-indigo-50 hover:scale-[1.02] active:scale-95 transition-all"
+                        >
                           <RotateCw size={20} />
-                          Sinkronasi Database
+                          Generate Sample Data
                         </button>
                       </div>
                     </div>
@@ -1604,6 +1749,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                                 className="text-[10px] font-black text-slate-400 uppercase underline hover:text-indigo-600"
                               >
                                 Edit Cat
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteRegCategory(cat.id)}
+                                className="text-[10px] font-black text-red-400 uppercase underline hover:text-red-600"
+                              >
+                                Delete
                               </button>
                               <button 
                                 onClick={() => { setSelectedRegItem({ categoryId: cat.id }); setIsEditingRegItem(true); }}

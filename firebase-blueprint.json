@@ -164,23 +164,55 @@
   "firestore": {
     "users/{userId}": {
       "schema": "User",
-      "description": "User profile documents."
+      "description": "Main user collection containing profile and role."
     },
-    "certifications/{certId}": {
+    "users/{userId}/profile/main": {
+      "schema": "User",
+      "description": "Detailed profile data."
+    },
+    "users/{userId}/emergencyContact/main": {
+      "schema": "object",
+      "description": "Emergency contact info."
+    },
+    "users/{userId}/careerProgress/{careerId}": {
+      "schema": "CareerHistory",
+      "description": "Career timeline items."
+    },
+    "users/{userId}/leaveCycles/{cycleId}": {
+      "schema": "object",
+      "description": "Leave entitlement cycles."
+    },
+    "users/{userId}/attendanceClaims/{claimId}": {
+      "schema": "AttendanceClaim",
+      "description": "Employee attendance claims."
+    },
+    "users/{userId}/certificates/{certificateId}": {
       "schema": "Certification",
       "description": "Employee certifications."
     },
-    "attendance/{attendanceId}": {
+    "users/{userId}/attendance/{attendanceId}": {
       "schema": "Attendance",
-      "description": "Attendance history records."
+      "description": "Daily attendance logs."
     },
-    "regulations/{categoryId}": {
+    "dashboardStats/{statId}": {
+      "schema": "object",
+      "description": "General dashboard statistics."
+    },
+    "policyCategories/{categoryId}": {
       "schema": "RegulationCategory",
-      "description": "HR regulations and policies."
+      "description": "HR policy categories."
     },
-    "helpCenter/{categoryId}": {
+    "policyItems/{policyId}": {
+      "schema": "object",
+      "description": "Individual policy items."
+    },
+    "helpCategories/{categoryId}": {
       "schema": "FaqCategory",
-      "description": "Help center and FAQ data."
+      "description": "Help center categories."
+    },
+    "faqItems/{faqId}": {
+      "schema": "object",
+      "description": "Individual FAQ items."
     }
   }
 }

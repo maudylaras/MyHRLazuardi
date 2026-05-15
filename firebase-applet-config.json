@@ -5,6 +5,6 @@
   "authDomain": "myhr-lazuardi.firebaseapp.com",
   "storageBucket": "myhr-lazuardi.firebasestorage.app",
   "messagingSenderId": "684074842242",
-  "firestoreDatabaseId": "",
+  "firestoreDatabaseId": "(default)",
   "measurementId": ""
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { auth, signInWithGoogle } from './lib/firebase';
+import { auth, signInWithGoogle, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -12,39 +13,59 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        // Authenticate only - Bypass Firestore storage/retrieval as per requirements
-        const isAdminUser = firebaseUser.email === 'maudy@lazuardi.sch.id' || firebaseUser.email === 'hrd@lazuardi.sch.id';
-        const isMaudy = firebaseUser.email === 'maudy@lazuardi.sch.id';
-        const isHRD = firebaseUser.email === 'hrd@lazuardi.sch.id';
-        
-        const currentProfile: UserProfile = {
-          userId: firebaseUser.uid,
-          name: firebaseUser.displayName || (isMaudy ? "Maudy Larasati.,S.Psi." : (isHRD ? "HRD Lazuardi" : 'User')),
-          email: firebaseUser.email || '',
-          role: isAdminUser ? 'admin' : 'employee',
-          photoUrl: firebaseUser.photoURL || '',
-          createdAt: new Date().toISOString(),
-          niy: isMaudy ? "10.25.818" : "",
-          nik: isMaudy ? "3276105508020001" : "",
-          unit: "Lazuardi",
-          position: isAdminUser ? "Staf HRD" : "Staf",
-          contractStatus: "Full Time",
-          entryDate: isMaudy ? "06-Jan-25" : "01-Jan-26",
-          gender: isMaudy ? "Pr." : "",
-          birthPlace: "Jakarta",
-          birthDate: "15 August 2002",
-          education: "S1 Psikologi",
-          phone: "081218496052",
-        };
-        setProfile(currentProfile);
+        setLoading(true);
+        try {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userSnap = await getDoc(userDocRef);
+          
+          if (userSnap.exists()) {
+            setProfile(userSnap.data() as UserProfile);
+          } else {
+            // Create user document if it does not exist
+            const newUser: UserProfile = {
+              userId: firebaseUser.uid,
+              name: firebaseUser.displayName || 'User',
+              email: firebaseUser.email || '',
+              role: (firebaseUser.email === 'maudy@lazuardi.sch.id' || firebaseUser.email === 'hrd@lazuardi.sch.id') ? 'admin' : 'employee',
+              photoUrl: firebaseUser.photoURL || '',
+              createdAt: new Date().toISOString(),
+              niy: '',
+              nik: '',
+              unit: 'Lazuardi',
+              position: 'Staf',
+              contractStatus: 'Full Time',
+              entryDate: new Date().toISOString().split('T')[0],
+              gender: '',
+              birthPlace: '',
+              birthDate: '',
+              education: '',
+              phone: '',
+            };
+            await setDoc(userDocRef, newUser);
+            setProfile(newUser);
+          }
+        } catch (error) {
+          console.error("Error fetching user profile:", error);
+          // Fallback to minimal profile if Firestore fails (likely rules)
+          setProfile({
+            userId: firebaseUser.uid,
+            name: firebaseUser.displayName || 'User',
+            email: firebaseUser.email || '',
+            role: 'employee',
+            photoUrl: firebaseUser.photoURL || '',
+            createdAt: new Date().toISOString(),
+          } as UserProfile);
+        } finally {
+          setLoading(false);
+        }
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();

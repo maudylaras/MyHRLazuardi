@@ -1,164 +1,94 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper Functions
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'maudy@lazuardi.sch.id' ||
-        request.auth.token.email == 'hrd@lazuardi.sch.id' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Validation Blueprint: User
-    function isValidUser(data) {
-      return data.keys().hasAll(['userId', 'name', 'email', 'role']) &&
-             data.keys().size() <= 40 &&
-             (data.userId == request.auth.uid || isAdmin() || data.userId.matches('^mock_.*')) &&
-             data.name is string && data.name.size() <= 100 &&
-             data.email is string && data.email.size() <= 100 &&
-             data.role in ['employee', 'admin'];
+    function incoming() {
+      return request.resource.data;
     }
 
-    // Validation Blueprint: Attendance
-    function isValidAttendance(data) {
-      return data.keys().hasAll(['userId', 'date']) &&
-             data.keys().size() <= 20 &&
-             data.userId == request.auth.uid &&
-             data.date is string && data.date.size() == 10 &&
-             (data.get('checkIn', null) == null || (
-               data.checkIn.time is timestamp &&
-               data.checkIn.location.lat is number &&
-               data.checkIn.location.lng is number
-             )) &&
-             (data.get('checkOut', null) == null || (
-               data.checkOut.time is timestamp &&
-               data.checkOut.location.lat is number &&
-               data.checkOut.location.lng is number
-             ));
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+
+      match /profile/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /emergencyContact/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /careerProgress/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /leaveCycles/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /attendanceClaims/{docId} {
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /certificates/{docId} {
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /attendance/{docId} {
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
     }
 
-    function isValidFaqCategory(data) {
-      return data.keys().hasAll(['id', 'title', 'items', 'order']) &&
-             data.id is string && data.id.size() <= 64 &&
-             data.title is string && data.title.size() <= 100 &&
-             data.items is list && data.items.size() <= 50 &&
-             data.order is int;
+    // Collection Group rule for attendanceClaims
+    match /{path=**}/attendanceClaims/{docId} {
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
     }
 
-    function isValidRegulationCategory(data) {
-      return data.keys().hasAll(['id', 'title', 'items', 'order']) &&
-             data.id is string && data.id.size() <= 64 &&
-             data.title is string && data.title.size() <= 100 &&
-             data.items is list && data.items.size() <= 50 &&
-             data.order is int;
+    match /dashboardStats/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
-    function isValidCertification(data) {
-      return data.keys().hasAll(['id', 'userId', 'name', 'date', 'createdAt']) &&
-             data.id is string && data.id.size() <= 128 &&
-             data.userId == request.auth.uid &&
-             data.name is string && data.name.size() <= 200 &&
-             data.date is string && data.date.size() == 10 &&
-             data.createdAt is string &&
-             (data.get('photoUrl', null) == null || (data.photoUrl is string && data.photoUrl.size() <= 1200000));
+    match /policyCategories/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
-    // User Profiles
-    match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isAdmin();
-      allow create: if (isOwner(userId) && isValidUser(incoming()) && (incoming().role == 'employee' || incoming().email == 'maudy@lazuardi.sch.id' || incoming().email == 'hrd@lazuardi.sch.id')) || isAdmin();
-      allow update: if (isOwner(userId) || isAdmin()) && 
-                    (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoUrl', 'position', 'department', 'address', 'phone', 'domicileAddress', 'residentialAddress']));
+    match /policyItems/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
-    // Certifications
-    match /certifications/{certId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && isValidCertification(incoming());
-      allow update: if isSignedIn() && isValidCertification(incoming()) && incoming().userId == existing().userId;
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    match /helpCategories/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
-    // Regulations
-    match /regulations/{categoryId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidRegulationCategory(incoming());
-    }
-
-    // Help Center
-    match /helpCenter/{categoryId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidFaqCategory(incoming());
-    }
-
-    // Career History
-    match /careerHistory/{historyId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
-    }
-
-    // Leave Entitlements
-    match /leaveEntitlements/{leaveId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
-    }
-
-    // Attendance Claims
-    match /attendanceClaims/{claimId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isAdmin();
-    }
-
-    // Attendance Records
-    match /attendance/{attendanceId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && isValidAttendance(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isValidAttendance(incoming()) && 
-                    incoming().userId == existing().userId &&
-                    (
-                      // Action: Check Out
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['checkOut', 'notes'])) ||
-                      isAdmin()
-                    );
-    }
-    
-    // Admins Collection (Read-only for rules)
-    match /admins/{adminId} {
-      allow read: if isSignedIn();
-    }
-
-    // Test Connection
-    match /test/connection {
-      allow read: if true;
-    }
-
-    // Default Deny
-    match /{document=**} {
-      allow read, write: if false;
+    match /faqItems/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
   }
 }
