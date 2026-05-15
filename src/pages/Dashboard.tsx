@@ -2174,10 +2174,37 @@ function EditCareerModal({ isOpen, onClose, data, onSave }: any) {
 }
 
 function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
-  const [lsCycles, setLsCycles] = useState<any[]>(data.longServiceLeave || []);
+  const [lsCycles, setLsCycles] = useState<any[]>([]);
 
   useEffect(() => {
-    setLsCycles(data.longServiceLeave || []);
+    if (isOpen) {
+      if (data.longServiceLeave && data.longServiceLeave.length > 0) {
+        setLsCycles(data.longServiceLeave);
+      } else if (data.entryDate) {
+        // Pre-calculate 10 cycles
+        const parts = data.entryDate.split('-');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0]);
+          const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const month = monthNames.indexOf(parts[1]);
+          const year = (parseInt(parts[2]) < 70 ? 2000 : 1900) + parseInt(parts[2]);
+          
+          const calculated = Array.from({ length: 10 }).map((_, i) => {
+            const targetDate = new Date(year, month, day);
+            targetDate.setFullYear(targetDate.getFullYear() + (i + 1) * 6);
+            return {
+              id: `calc-${i}-${Date.now()}`,
+              cycleNumber: i + 1,
+              dateObtained: targetDate.toISOString().split('T')[0],
+              status: 'upcoming'
+            };
+          });
+          setLsCycles(calculated);
+        }
+      } else {
+        setLsCycles([]);
+      }
+    }
   }, [data, isOpen]);
 
   return (
@@ -2187,29 +2214,33 @@ function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
            <div className="flex items-center justify-between">
               <h5 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em]">Siklus Pengabdian (6 Tahunan)</h5>
               <button 
-                onClick={() => setLsCycles([...lsCycles, { id: Date.now().toString(), cycleNumber: lsCycles.length + 1, dateObtained: '20XX-01-01', status: 'upcoming' }])}
+                onClick={() => setLsCycles([...lsCycles, { id: Date.now().toString(), cycleNumber: lsCycles.length + 1, dateObtained: new Date().toISOString().split('T')[0], status: 'upcoming' }])}
                 className="text-[10px] font-black text-indigo-600 uppercase underline"
               >
                 + Tambah Siklus
               </button>
            </div>
            
-           <div className="space-y-4">
+           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
               {lsCycles.map((cycle, idx) => (
                 <div key={idx} className="flex gap-4 items-center bg-slate-50 p-5 rounded-3xl border border-slate-100 relative group">
-                   <div className="h-10 w-10 flex items-center justify-center rounded-2xl bg-white text-blue-600 font-bold border border-blue-50">
+                   <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-2xl bg-white text-blue-600 font-bold border border-blue-50">
                       {idx + 1}
                    </div>
                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <Input 
-                        label={`Tanggal Cuti ke ${idx + 1}`} 
-                        value={cycle.dateObtained} 
-                        onChange={(v) => {
-                          const next = [...lsCycles];
-                          next[idx] = { ...cycle, dateObtained: v };
-                          setLsCycles(next);
-                        }} 
-                      />
+                      <div className="space-y-1.5 text-left">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tanggal Diperoleh</label>
+                        <input 
+                          type="date"
+                          value={cycle.dateObtained}
+                          onChange={(e) => {
+                            const next = [...lsCycles];
+                            next[idx] = { ...cycle, dateObtained: e.target.value };
+                            setLsCycles(next);
+                          }}
+                          className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-200 transition-all"
+                        />
+                      </div>
                       <div className="space-y-1.5 text-left">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Status</label>
                         <select
@@ -2221,16 +2252,16 @@ function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
                           }}
                           className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                         >
-                          <option value="upcoming">Upcoming</option>
-                          <option value="available">Available</option>
-                          <option value="claimed">Claimed</option>
-                          <option value="expired">Expired</option>
+                          <option value="upcoming">Akan Datang</option>
+                          <option value="available">Tersedia</option>
+                          <option value="claimed">Sudah Klaim</option>
+                          <option value="expired">Kadaluarsa</option>
                         </select>
                       </div>
                    </div>
                    <button 
                     onClick={() => setLsCycles(lsCycles.filter((_, i) => i !== idx))}
-                    className="h-10 w-10 flex items-center justify-center text-red-300 hover:text-red-500 transition-colors"
+                    className="h-10 w-10 shrink-0 flex items-center justify-center text-red-300 hover:text-red-500 transition-colors"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -2248,7 +2279,7 @@ function EditCutiModal({ isOpen, onClose, data, onSave }: any) {
           }} 
           className="w-full py-6 bg-slate-900 text-white font-black rounded-3xl shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest text-sm"
         >
-           Update Masa Cuti Milestone
+           Simpan Perubahan
         </button>
       </div>
     </Modal>
