@@ -176,51 +176,77 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
+    // Only run if we have a valid user and profile and auth is ready
+    if (!user || !profile?.userId || !auth.currentUser) return;
+
     // Listen for regulation categories
     const qReg = query(collection(db, 'policyCategories'), orderBy('createdAt', 'asc'));
     const unsubReg = onSnapshot(qReg, async (snap) => {
-      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      
-      // Fetch items for each category
-      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
-        const itemSnap = await getDocs(query(collection(db, 'policyItems'), where('categoryId', '==', cat.id)));
-        return {
-          ...cat,
-          title: cat.name,
-          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        } as RegulationCategory;
-      }));
-      
-      setRegulationCategories(categoriesWithItems);
+      try {
+        const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        
+        // Fetch items for each category
+        const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+          if (!auth.currentUser) return null;
+          const itemSnap = await getDocs(query(collection(db, 'policyItems'), where('categoryId', '==', cat.id)));
+          return {
+            ...cat,
+            title: cat.name,
+            items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+          } as RegulationCategory;
+        }));
+        
+        setRegulationCategories(categoriesWithItems.filter(Boolean) as RegulationCategory[]);
+      } catch (err) {
+        console.error("Error processing regulation categories:", err);
+      }
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'policyCategories');
+      // Only report if we are still signed in
+      if (auth.currentUser) {
+        handleFirestoreError(err, OperationType.LIST, 'policyCategories');
+      }
     });
     
     // Listen for help categories
     const qHelp = query(collection(db, 'helpCategories'), orderBy('createdAt', 'asc'));
     const unsubFaq = onSnapshot(qHelp, async (snap) => {
-      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      
-      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
-        const itemSnap = await getDocs(query(collection(db, 'faqItems'), where('categoryId', '==', cat.id)));
-        return {
-          ...cat,
-          title: cat.name,
-          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        } as FaqCategory;
-      }));
-      
-      setFaqCategories(categoriesWithItems);
+      try {
+        const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        
+        const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+          if (!auth.currentUser) return null;
+          const itemSnap = await getDocs(query(collection(db, 'faqItems'), where('categoryId', '==', cat.id)));
+          return {
+            ...cat,
+            title: cat.name,
+            items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+          } as FaqCategory;
+        }));
+        
+        setFaqCategories(categoriesWithItems.filter(Boolean) as FaqCategory[]);
+      } catch (err) {
+        console.error("Error processing help categories:", err);
+      }
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'helpCategories');
+      if (auth.currentUser) {
+        handleFirestoreError(err, OperationType.LIST, 'helpCategories');
+      }
     });
 
     // Listen for all employees if admin
     let unsubEmployees: () => void = () => {};
-    if (isAdmin) {
+    if (isAdmin && auth.currentUser) {
       unsubEmployees = onSnapshot(collection(db, 'users'), (snap) => {
-        const employees = snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile));
-        setAllEmployees(employees);
+        try {
+          const employees = snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile));
+          setAllEmployees(employees);
+        } catch (err) {
+          console.error("Error processing all employees:", err);
+        }
+      }, (err) => {
+        if (auth.currentUser) {
+          console.warn("Error listening to all employees:", err);
+        }
       });
     }
 
@@ -229,38 +255,69 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       unsubFaq();
       unsubEmployees();
     };
-  }, [isAdmin]);
+  }, [isAdmin, user?.uid, profile?.userId, auth.currentUser]);
 
   // Listen for specific data when viewedProfile changes
   useEffect(() => {
-    if (!viewedProfile?.userId) return;
+    // CRITICAL: Ensure we have both viewedProfile.userId and current authenticated user
+    if (!viewedProfile?.userId || !auth.currentUser) {
+      console.log("Dashboard: Skipping listeners, missing identifiers", { 
+        viewedId: viewedProfile?.userId, 
+        authId: auth.currentUser?.uid 
+      });
+      return;
+    }
+
+    console.log("Dashboard: Starting listeners for", viewedProfile.userId);
 
     // Certificates
     const qCert = query(collection(db, `users/${viewedProfile.userId}/certificates`), orderBy('createdAt', 'desc'));
     const unsubCert = onSnapshot(qCert, (snap) => {
-      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
-      setCertifications(certs);
+      try {
+        const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
+        setCertifications(certs);
+      } catch (err) {
+        console.error("Error processing certificates:", err);
+      }
     }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'certificates');
+      if (auth.currentUser) {
+        handleFirestoreError(err, OperationType.LIST, 'certificates');
+      }
     });
 
     // Career Progress
     const qCareer = query(collection(db, `users/${viewedProfile.userId}/careerProgress`), orderBy('order', 'asc'));
     const unsubCareer = onSnapshot(qCareer, (snap) => {
-      const career = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CareerHistory));
-      setCareerHistory(career);
+      try {
+        const career = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CareerHistory));
+        setCareerHistory(career);
+      } catch (err) {
+        console.error("Error processing career progress:", err);
+      }
+    }, (err) => {
+      if (auth.currentUser) {
+        console.warn("Error listening to career progress:", err);
+      }
     });
 
     // Leave Cycles
     const qLeave = query(collection(db, `users/${viewedProfile.userId}/leaveCycles`), orderBy('createdAt', 'asc'));
     const unsubLeave = onSnapshot(qLeave, (snap) => {
-      const leave = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      setLeaveEntitlements(leave);
+      try {
+        const leave = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setLeaveEntitlements(leave);
+      } catch (err) {
+        console.error("Error processing leave cycles:", err);
+      }
+    }, (err) => {
+      if (auth.currentUser) {
+         console.warn("Error listening to leave cycles:", err);
+      }
     });
 
     // Attendance Claims
     let qClaims;
-    if (isAdmin && showAllClaims) {
+    if (isAdmin && showAllClaims && auth.currentUser) {
       qClaims = query(collectionGroup(db, 'attendanceClaims'), orderBy('createdAt', 'desc'));
     } else {
       qClaims = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
@@ -268,12 +325,27 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     
     // Note: collectionGroup requires an index. If it fails, fallback to simple query or single user view.
     const unsubClaims = onSnapshot(qClaims, (snap) => {
-      const claims = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
-      setAttendanceClaims(claims);
+      try {
+        const claims = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+        setAttendanceClaims(claims);
+      } catch (err) {
+        console.error("Error processing attendance claims:", err);
+      }
     }, (err) => {
       // Fallback if collectionGroup index is missing
       if (err.message.includes('index')) {
         console.warn('CollectionGroup index missing for attendanceClaims');
+        if (auth.currentUser && viewedProfile?.userId) {
+          const fallbackQuery = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
+          onSnapshot(fallbackQuery, (s) => {
+            const claims = s.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceClaim));
+            setAttendanceClaims(claims);
+          }, (fallbackErr) => {
+             console.error("Attendance claims fallback error:", fallbackErr);
+          });
+        }
+      } else if (auth.currentUser) {
+        handleFirestoreError(err, OperationType.LIST, 'attendanceClaims');
       }
     });
 
@@ -283,7 +355,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       unsubLeave();
       unsubClaims();
     };
-  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
+  }, [viewedProfile?.userId, isAdmin, showAllClaims, auth.currentUser]);
 
   // Sync profileForm when viewedProfile changes
   useEffect(() => {
@@ -388,6 +460,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       const id = cert.id || doc(collection(db, `users/${viewedProfile.userId}/certificates`)).id;
       await setDoc(doc(db, `users/${viewedProfile.userId}/certificates`, id), {
         ...cert,
+        userId: viewedProfile.userId,
         createdAt: cert.createdAt || serverTimestamp()
       }, { merge: true });
       setIsEditingCertification(false);
@@ -490,6 +563,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           const id = cycle.id || doc(subCollRef).id;
           await setDoc(doc(db, `users/${viewedProfile.userId}/leaveCycles`, id), {
             ...cycle,
+            userId: viewedProfile.userId,
             updatedAt: serverTimestamp()
           }, { merge: true });
         }
@@ -605,70 +679,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       handleFirestoreError(err, OperationType.UPDATE, 'users');
     }
   };
-
-  useEffect(() => {
-    if (viewedProfile?.userId) {
-      /* Firestore disabled as per user request
-      const fetchProfile = async () => {
-        try {
-          const docRef = doc(db, 'users', viewedProfile.userId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data() as UserProfile;
-            setViewedProfile(data);
-            if (data.careerHistory) setCareerHistory(data.careerHistory);
-            if (data.cutiData) setCutiData(data.cutiData);
-            // Also sync in allEmployees list
-            setAllEmployees(prev => prev.map(e => e.userId === data.userId ? data : e));
-          }
-        } catch (err) {
-          console.error("Error fetching viewed profile:", err);
-        }
-      };
-      
-      fetchProfile();
-
-      // Listen for leave entitlements
-      const q = query(
-        collection(db, 'leaveEntitlements'),
-        where('userId', '==', viewedProfile.userId)
-      );
-      
-      const unsubLeave = onSnapshot(q, (snap) => {
-        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-        setLeaveEntitlements(data);
-      }, (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'leaveEntitlements');
-      });
-
-      // Listen for attendance claims
-      const claimsPath = 'attendanceClaims';
-      let claimsQuery;
-      
-      if (isAdmin && showAllClaims) {
-        claimsQuery = query(collection(db, claimsPath), orderBy('createdAt', 'desc'));
-      } else {
-        claimsQuery = query(
-          collection(db, claimsPath),
-          where('userId', '==', viewedProfile.userId),
-          orderBy('createdAt', 'desc')
-        );
-      }
-
-      const unsubClaims = onSnapshot(claimsQuery, (snap) => {
-        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
-        setAttendanceClaims(data);
-      }, (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'attendanceClaims');
-      });
-
-      return () => {
-        unsubLeave();
-        unsubClaims();
-      };
-      */
-    }
-  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
 
   const handleDeleteEmployee = async (userId: string) => {
     if (!confirm('Hapus data karyawan ini secara permanen?')) return;

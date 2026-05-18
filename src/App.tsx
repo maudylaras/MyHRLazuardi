@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, signInWithGoogle, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -11,60 +11,67 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
+        setAuthError(null); // Clear error on successful auth
         setLoading(true);
         try {
+          // 1. Check if document users/{currentUser.uid} already exists
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
           
           if (userSnap.exists()) {
-            setProfile(userSnap.data() as UserProfile);
+            setProfile({ userId: userSnap.id, ...userSnap.data() } as UserProfile);
           } else {
-            // Create user document if it does not exist
-            const newUser: UserProfile = {
-              userId: firebaseUser.uid,
-              name: firebaseUser.displayName || 'User',
-              email: firebaseUser.email || '',
-              role: (firebaseUser.email === 'maudy@lazuardi.sch.id' || firebaseUser.email === 'hrd@lazuardi.sch.id') ? 'admin' : 'employee',
-              photoUrl: firebaseUser.photoURL || '',
-              createdAt: new Date().toISOString(),
-              niy: '',
-              nik: '',
-              unit: 'Lazuardi',
-              position: 'Staf',
-              contractStatus: 'Full Time',
-              entryDate: new Date().toISOString().split('T')[0],
-              gender: '',
-              birthPlace: '',
-              birthDate: '',
-              education: '',
-              phone: '',
-            };
-            await setDoc(userDocRef, newUser);
-            setProfile(newUser);
+            // 2. If it does not exist, look for an old profile by email
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', firebaseUser.email));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+              // Found old profile
+              const oldProfileDoc = querySnapshot.docs[0];
+              const oldProfileData = oldProfileDoc.data();
+              const oldProfileId = oldProfileDoc.id;
+
+              // 3. Create new document users/{currentUser.uid} copying all data
+              const newUser: UserProfile = {
+                ...(oldProfileData as UserProfile),
+                userId: firebaseUser.uid,
+                // Add/Update required fields
+                authUid: firebaseUser.uid,
+                email: firebaseUser.email || (oldProfileData.email as string),
+                linkedProfileId: oldProfileId,
+                profileLinkedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              };
+
+              await setDoc(userDocRef, newUser);
+              
+              setProfile(newUser);
+            } else {
+              // 4. No profile found by email
+              setAuthError("Your account is not registered. Please contact HR Admin.");
+              await auth.signOut();
+              setUser(null);
+              setProfile(null);
+            }
           }
         } catch (error) {
           console.error("Error fetching user profile:", error);
-          // Fallback to minimal profile if Firestore fails (likely rules)
-          setProfile({
-            userId: firebaseUser.uid,
-            name: firebaseUser.displayName || 'User',
-            email: firebaseUser.email || '',
-            role: 'employee',
-            photoUrl: firebaseUser.photoURL || '',
-            createdAt: new Date().toISOString(),
-          } as UserProfile);
+          setAuthError("Terjadi kesalahan saat memproses akun. Silakan hubungi admin.");
         } finally {
           setLoading(false);
         }
       } else {
         setProfile(null);
         setLoading(false);
+        // Do NOT clear authError here, let it persist for Login component
       }
     });
 
@@ -84,7 +91,7 @@ export default function App() {
       {user && profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <Login onLogin={signInWithGoogle} />
+        <Login onLogin={signInWithGoogle} externalError={authError} />
       )}
     </div>
   );

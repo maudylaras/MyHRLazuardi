@@ -32,6 +32,10 @@ export interface UserProfile {
   cutiData?: { tahunan: number; besar: number };
   longServiceLeave?: LongServiceCycle[];
   createdAt: string;
+  authUid?: string;
+  linkedProfileId?: string;
+  profileLinkedAt?: any;
+  updatedAt?: any;
 }
 
 export interface RegulationItem {
