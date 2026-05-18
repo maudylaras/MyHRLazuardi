@@ -93,7 +93,7 @@ interface DashboardProps {
   profile: UserProfile;
 }
 
-type Tab = 'dashboard' | 'data-diri' | 'karir' | 'cuti' | 'klaim' | 'regulasi' | 'faq' | 'certification';
+type Tab = 'dashboard' | 'data-diri' | 'karir' | 'cuti' | 'klaim' | 'regulasi' | 'certification';
 
 const BAR_DATA = [
   { name: 'TA 20/21', TK: 16, SD: 47, SMP: 18, SUPPORT: 66 },
@@ -759,7 +759,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           <SidebarItem id="klaim" icon={<Fingerprint size={22} />} label="Klaim Absensi" />
           <SidebarItem id="certification" icon={<Award size={22} />} label="Sertifikat" />
           <SidebarItem id="regulasi" icon={<BookOpen size={22} />} label="Regulasi" />
-          <SidebarItem id="faq" icon={<HelpCircle size={22} />} label="Pusat Bantuan" />
         </nav>
 
         <div className="p-6">
@@ -783,7 +782,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
               {activeTab === 'data-diri' ? 'Karyawan Profile' : 
                activeTab === 'cuti' ? 'Cuti Besar' : 
                activeTab === 'regulasi' ? 'Regulasi & Kebijakan' : 
-               activeTab === 'faq' ? 'Pusat Bantuan' : 
                activeTab === 'certification' ? 'Sertifikat Saya' : 'Dashboard Hub'}
             </h2>
           </div>
@@ -1684,119 +1682,188 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                 key="regulasi"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-6xl mx-auto space-y-12"
+                className="max-w-6xl mx-auto space-y-20"
               >
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="space-y-2 text-center md:text-left">
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Kebijakan & Regulasi</h3>
-                    <p className="text-sm font-medium text-slate-400 italic">Pedoman resmi dan tata tertib Lazuardi HR.</p>
+                {/* Regulations Section */}
+                <div className="space-y-12">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="space-y-2 text-center md:text-left">
+                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Kebijakan & Regulasi</h3>
+                      <p className="text-sm font-medium text-slate-400 italic">Pedoman resmi dan tata tertib Lazuardi HR.</p>
+                    </div>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => { setSelectedRegCategory(null); setIsEditingRegCategory(true); }}
+                        className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all"
+                      >
+                        + Tambah Kategori
+                      </button>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => { setSelectedRegCategory(null); setIsEditingRegCategory(true); }}
-                      className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all"
-                    >
-                      + Tambah Kategori
-                    </button>
-                  )}
-                </div>
 
-                <div className="rounded-[48px] bg-indigo-600 p-12 lg:p-16 text-white shadow-2xl relative overflow-hidden group">
-                   <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none">
-                      <BookOpen size={400} className="translate-x-1/2 -translate-y-1/4" />
-                   </div>
-                   <div className="relative space-y-8 max-w-2xl">
-                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/20 backdrop-blur-sm">
-                         <ShieldCheck size={16} />
-                         <span className="text-[10px] font-black uppercase tracking-widest">Portal Utama</span>
-                      </div>
-                      <h4 className="text-5xl font-black tracking-tighter leading-[1.1]">Pedoman Lengkap Peraturan Karyawan</h4>
-                      <p className="text-indigo-100 text-lg font-medium leading-relaxed opacity-80">
-                        Akses portal resmi untuk meninjau seluruh peraturan, kebijakan, tata tertib, dan regulasi ketenagakerjaan di lingkungan Lazuardi.
-                      </p>
-                      <div className="flex flex-wrap items-center gap-4">
-                        <a 
-                          href="https://sites.google.com/lazuardi.sch.id/tugas-hrd-peraturan/unser-1"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-3 px-10 py-5 bg-white text-indigo-600 font-black text-sm uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-900/20 hover:scale-105 transition-all"
-                        >
-                           Buka Portal Peraturan <ExternalLink size={20} />
-                        </a>
-                        <a 
-                          href="https://sites.google.com/lazuardi.sch.id/internal-memo"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-3 px-10 py-5 bg-white/10 hover:bg-white/20 text-white font-black text-sm uppercase tracking-widest rounded-2xl border border-white/20 backdrop-blur-sm transition-all"
-                        >
-                           Internal Memo <ExternalLink size={20} />
-                        </a>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   {regulationCategories.map((cat) => (
-                     <div key={cat.id} className="space-y-6">
-                        <div className="flex items-center justify-between px-4">
-                          <div className="flex items-center gap-3">
-                            <h5 className="text-sm font-black text-slate-900 uppercase tracking-widest">{cat.title}</h5>
-                          </div>
-                          {isAdmin && (
-                            <div className="flex items-center gap-4">
-                              <button 
-                                onClick={() => { setSelectedRegCategory(cat); setIsEditingRegCategory(true); }}
-                                className="text-[10px] font-black text-slate-400 uppercase underline hover:text-indigo-600"
-                              >
-                                Edit Cat
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteRegCategory(cat.id)}
-                                className="text-[10px] font-black text-red-400 uppercase underline hover:text-red-600"
-                              >
-                                Delete
-                              </button>
-                              <button 
-                                onClick={() => { setSelectedRegItem({ categoryId: cat.id }); setIsEditingRegItem(true); }}
-                                className="text-[10px] font-black text-indigo-600 uppercase underline"
-                              >
-                                + Tambah Item
-                              </button>
-                            </div>
-                          )}
+                  <div className="rounded-[48px] bg-indigo-600 p-12 lg:p-16 text-white shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none">
+                        <BookOpen size={400} className="translate-x-1/2 -translate-y-1/4" />
+                    </div>
+                    <div className="relative space-y-8 max-w-2xl text-left">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/20 backdrop-blur-sm">
+                          <ShieldCheck size={16} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Portal Utama Peraturan</span>
                         </div>
-                        {cat.items?.map((item) => (
-                          <div key={item.id} className="rounded-[40px] bg-white p-8 shadow-sm border border-slate-100 hover:shadow-xl transition-all relative group/reg">
-                             <div className="flex items-center gap-4 mb-4">
-                                <div className={cn(
-                                  "h-12 w-12 rounded-2xl flex items-center justify-center",
-                                  item.iconType === 'alert' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
-                                )}>
-                                   {item.iconType === 'alert' ? <ShieldAlert size={24} /> : <ShieldCheck size={24} />}
+                        <h4 className="text-5xl font-black tracking-tighter leading-[1.1]">Pedoman Lengkap Peraturan Karyawan</h4>
+                        <p className="text-indigo-100 text-lg font-medium leading-relaxed opacity-80">
+                          Akses portal resmi untuk meninjau seluruh peraturan, kebijakan, tata tertib, dan regulasi ketenagakerjaan di lingkungan Lazuardi.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <a 
+                            href="https://reflectionjournallessi.my.canva.site/peraturan-perusahaan"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-3 px-10 py-5 bg-white text-indigo-600 font-black text-sm uppercase tracking-widest rounded-2xl shadow-2xl shadow-indigo-900/20 hover:scale-105 transition-all"
+                          >
+                            Buka Portal Peraturan dan Internal Memo <ExternalLink size={20} />
+                          </a>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {regulationCategories.map((cat) => (
+                      <div key={cat.id} className="space-y-6">
+                          <div className="flex items-center justify-between px-4">
+                            <div className="flex items-center gap-3">
+                              <h5 className="text-sm font-black text-slate-900 uppercase tracking-widest">{cat.title}</h5>
+                            </div>
+                            {isAdmin && (
+                              <div className="flex items-center gap-4">
+                                <button 
+                                  onClick={() => { setSelectedRegCategory(cat); setIsEditingRegCategory(true); }}
+                                  className="text-[10px] font-black text-slate-400 uppercase underline hover:text-indigo-600"
+                                >
+                                  Edit Cat
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteRegCategory(cat.id)}
+                                  className="text-[10px] font-black text-red-400 uppercase underline hover:text-red-600"
+                                >
+                                  Delete
+                                </button>
+                                <button 
+                                  onClick={() => { setSelectedRegItem({ categoryId: cat.id }); setIsEditingRegItem(true); }}
+                                  className="text-[10px] font-black text-indigo-600 uppercase underline"
+                                >
+                                  + Tambah Item
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {cat.items?.map((item) => (
+                            <div key={item.id} className="rounded-[40px] bg-white p-8 shadow-sm border border-slate-100 hover:shadow-xl transition-all relative group/reg">
+                              <div className="flex items-center gap-4 mb-4 text-left">
+                                  <div className={cn(
+                                    "h-12 w-12 rounded-2xl flex items-center justify-center",
+                                    item.iconType === 'alert' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
+                                  )}>
+                                    {item.iconType === 'alert' ? <ShieldAlert size={24} /> : <ShieldCheck size={24} />}
+                                  </div>
+                                  <p className="text-xl font-bold text-slate-900 pr-12">{item.title}</p>
+                              </div>
+                              <p className="text-slate-400 text-sm font-medium leading-relaxed text-left">{item.description}</p>
+                              {isAdmin && (
+                                <div className="absolute top-8 right-8 flex items-center gap-2 opacity-0 group-hover/reg:opacity-100 transition-all">
+                                  <button 
+                                    onClick={() => { setSelectedRegItem({ categoryId: cat.id, item }); setIsEditingRegItem(true); }}
+                                    className="text-slate-300 hover:text-indigo-600"
+                                  >
+                                    <Edit3 size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteRegItem(cat.id, item.id)}
+                                    className="text-slate-300 hover:text-red-500"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
                                 </div>
-                                <p className="text-xl font-bold text-slate-900 pr-12">{item.title}</p>
-                             </div>
-                             <p className="text-slate-400 text-sm font-medium leading-relaxed">{item.description}</p>
-                             {isAdmin && (
-                               <div className="absolute top-8 right-8 flex items-center gap-2 opacity-0 group-hover/reg:opacity-100 transition-all">
-                                 <button 
-                                   onClick={() => { setSelectedRegItem({ categoryId: cat.id, item }); setIsEditingRegItem(true); }}
-                                   className="text-slate-300 hover:text-indigo-600"
-                                 >
-                                   <Edit3 size={16} />
-                                 </button>
-                                 <button 
-                                   onClick={() => handleDeleteRegItem(cat.id, item.id)}
-                                   className="text-slate-300 hover:text-red-500"
-                                 >
-                                   <Trash2 size={16} />
-                                 </button>
-                               </div>
-                             )}
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* FAQ Section */}
+                <div className="pt-12 border-t border-slate-100 space-y-12">
+                  <div className="space-y-6 max-w-2xl mx-auto text-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 mb-4 animate-bounce">
+                        <HelpCircle size={16} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] leading-none pt-0.5">Pusat Bantuan (FAQ)</span>
+                    </div>
+                    <h3 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tighter">Apa yang bisa kami bantu?</h3>
+                    <p className="text-slate-400 font-medium text-lg leading-relaxed italic">Temukan jawaban atas pertanyaan umum seputar kebijakan, sistem, dan operasional MyHR Connect.</p>
+                  </div>
+
+                  <div className="flex flex-col gap-8">
+                    <div className="flex flex-wrap items-center justify-center gap-4">
+                        {['ALL', ...faqCategories.map(c => c.title.toUpperCase())].map((cat, i) => {
+                          const actualCat = cat === 'ALL' ? 'ALL' : faqCategories.find(c => c.title.toUpperCase() === cat)?.id || cat;
+                          return (
+                            <button 
+                            key={i} 
+                            onClick={() => setActiveFaqTab(actualCat)}
+                            className={cn(
+                              "px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all",
+                              activeFaqTab === actualCat ? "bg-slate-900 text-white shadow-xl" : "bg-white text-slate-400 border-2 border-slate-50 hover:bg-slate-50"
+                            )}
+                            >
+                              {cat}
+                            </button>
+                          );
+                        })}
+                        {isAdmin && (
+                          <button 
+                            onClick={() => { setSelectedFaqCategory(null); setIsEditingFaqCategory(true); }}
+                            className="px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-white border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                          >
+                            + Tambah Kategori FAQ
+                          </button>
+                        )}
+                    </div>
+
+                    <div className="max-w-4xl mx-auto w-full space-y-12">
+                        {faqCategories
+                        .filter(cat => activeFaqTab === 'ALL' || cat.id === activeFaqTab)
+                        .map((cat) => (
+                          <div key={cat.id} className="space-y-6">
+                              <div className="flex items-center justify-between px-4">
+                                <div className="flex items-center gap-3">
+                                  <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em]">{cat.title}</p>
+                                </div>
+                                {isAdmin && (
+                                  <div className="flex items-center gap-4">
+                                      <button onClick={() => { setSelectedFaqCategory(cat); setIsEditingFaqCategory(true); }} className="text-[9px] font-black text-slate-400 uppercase underline">Edit Cat</button>
+                                      <button onClick={() => { setSelectedFaqItem({ categoryId: cat.id }); setIsEditingFaqItem(true); }} className="text-[9px] font-black text-indigo-600 uppercase underline">+ Tambah Item</button>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-4">
+                                  {cat.items?.map((item) => (
+                                    <FaqAccordion 
+                                      key={item.id}
+                                      question={item.question}
+                                      answer={item.answer}
+                                      isAdmin={isAdmin}
+                                      onEdit={() => { setSelectedFaqItem({ categoryId: cat.id, item }); setIsEditingFaqItem(true); }}
+                                      onDelete={() => handleDeleteFaqItem(cat.id, item.id)}
+                                    />
+                                  ))}
+                              </div>
                           </div>
                         ))}
-                     </div>
-                   ))}
+                    </div>
+
+
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1869,102 +1936,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                     ))}
                   </div>
                 )}
-              </motion.div>
-            )}
-
-            {activeTab === 'faq' && (
-              <motion.div
-                key="faq"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="max-w-6xl mx-auto text-center space-y-16 py-10"
-              >
-                <div className="space-y-6 max-w-2xl mx-auto">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 mb-4 animate-bounce">
-                       <HelpCircle size={16} />
-                       <span className="text-[10px] font-black uppercase tracking-[0.2em] leading-none pt-0.5">Knowledge Center</span>
-                    </div>
-                    <h3 className="text-6xl font-black text-slate-900 tracking-tighter">Apa yang bisa kami bantu?</h3>
-                    <p className="text-slate-400 font-medium text-lg leading-relaxed italic">Temukan jawaban atas pertanyaan umum seputar kebijakan, sistem, dan operasional MyHR Connect di satu tempat.</p>
-                    
-                    <div className="relative mt-12 flex flex-col items-center gap-4">
-                       <div className="relative w-full">
-                         <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-400" size={24} />
-                         <input 
-                          type="text" 
-                          placeholder="Cari topik atau pertanyaan..." 
-                          className="w-full bg-white border-2 border-slate-100 py-8 pl-20 pr-10 rounded-[32px] text-xl font-bold shadow-2xl shadow-indigo-100/20 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
-                         />
-                       </div>
-                       
-                       <button 
-                         className="mt-4 flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-200 hover:scale-105 active:scale-95 transition-all"
-                         onClick={() => window.open('mailto:hr@lazuardi.sch.id?subject=Bantuan HR')}
-                       >
-                         <Phone size={18} /> Tanyakan ke tim HR
-                       </button>
-                    </div>
-                </div>
-
-                <div className="flex flex-col gap-8">
-                  <div className="flex flex-wrap items-center justify-center gap-4">
-                     {['ALL', ...faqCategories.map(c => c.title.toUpperCase())].map((cat, i) => {
-                       const actualCat = cat === 'ALL' ? 'ALL' : faqCategories.find(c => c.title.toUpperCase() === cat)?.id || cat;
-                       return (
-                         <button 
-                          key={i} 
-                          onClick={() => setActiveFaqTab(actualCat)}
-                          className={cn(
-                            "px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all",
-                            activeFaqTab === actualCat ? "bg-slate-900 text-white shadow-xl" : "bg-white text-slate-400 border-2 border-slate-50 hover:bg-slate-50"
-                          )}
-                         >
-                           {cat}
-                         </button>
-                       );
-                     })}
-                     {isAdmin && (
-                       <button 
-                         onClick={() => { setSelectedFaqCategory(null); setIsEditingFaqCategory(true); }}
-                         className="px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-white border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                       >
-                         + Tambah Kategori
-                       </button>
-                     )}
-                  </div>
-
-                  <div className="max-w-4xl mx-auto w-full space-y-12">
-                     {faqCategories
-                      .filter(cat => activeFaqTab === 'ALL' || cat.id === activeFaqTab)
-                      .map((cat) => (
-                        <div key={cat.id} className="space-y-6">
-                           <div className="flex items-center justify-between px-4">
-                             <div className="flex items-center gap-3">
-                               <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em]">{cat.title}</p>
-                             </div>
-                             {isAdmin && (
-                               <div className="flex items-center gap-4">
-                                  <button onClick={() => { setSelectedFaqCategory(cat); setIsEditingFaqCategory(true); }} className="text-[9px] font-black text-slate-400 uppercase underline">Edit Cat</button>
-                                  <button onClick={() => { setSelectedFaqItem({ categoryId: cat.id }); setIsEditingFaqItem(true); }} className="text-[9px] font-black text-indigo-600 uppercase underline">+ Tambah Item</button>
-                               </div>
-                             )}
-                           </div>
-                           <div className="space-y-4">
-                              {cat.items?.map((item) => (
-                                <FaqAccordion 
-                                  key={item.id}
-                                  question={item.question}
-                                  answer={item.answer}
-                                  isAdmin={isAdmin}
-                                  onEdit={() => { setSelectedFaqItem({ categoryId: cat.id, item }); setIsEditingFaqItem(true); }}
-                                  onDelete={() => handleDeleteFaqItem(cat.id, item.id)}
-                                />
-                              ))}
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-                </div>
               </motion.div>
             )}
           </AnimatePresence>
