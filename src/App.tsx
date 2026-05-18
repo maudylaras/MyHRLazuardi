@@ -18,19 +18,22 @@ export default function App() {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        setAuthError(null); // Clear error on successful auth
+        setAuthError(null); 
         setLoading(true);
         try {
+          const loginEmail = (firebaseUser.email || '').toLowerCase().trim();
+          
           // 1. Check if document users/{currentUser.uid} already exists
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
           
           if (userSnap.exists()) {
+            // Already linked or UID-based profile
             setProfile({ userId: userSnap.id, ...userSnap.data() } as UserProfile);
           } else {
-            // 2. If it does not exist, look for an old profile by email
+            // 2. If it does not exist, look for an old profile by normalized email
             const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('email', '==', firebaseUser.email));
+            const q = query(usersRef, where('email', '==', loginEmail));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
@@ -40,22 +43,23 @@ export default function App() {
               const oldProfileId = oldProfileDoc.id;
 
               // 3. Create new document users/{currentUser.uid} copying all data
-              const newUser: UserProfile = {
-                ...(oldProfileData as UserProfile),
+              // We strictly preserve all existing fields, especially role
+              const newUser: any = {
+                ...oldProfileData,
                 userId: firebaseUser.uid,
-                // Add/Update required fields
                 authUid: firebaseUser.uid,
-                email: firebaseUser.email || (oldProfileData.email as string),
+                email: loginEmail,
                 linkedProfileId: oldProfileId,
                 profileLinkedAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
+                isLinkedProfile: true
               };
 
-              await setDoc(userDocRef, newUser);
+              await setDoc(userDocRef, newUser, { merge: true });
               
-              setProfile(newUser);
+              setProfile(newUser as UserProfile);
             } else {
-              // 4. No profile found by email
+              // 4. No profile found by email - Access Denied
               setAuthError("Your account is not registered. Please contact HR Admin.");
               await auth.signOut();
               setUser(null);

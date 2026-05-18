@@ -19,7 +19,6 @@ import {
   query, 
   where, 
   getDocs, 
-  addDoc, 
   updateDoc, 
   setDoc,
   deleteDoc,
@@ -326,7 +325,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     // Note: collectionGroup requires an index. If it fails, fallback to simple query or single user view.
     const unsubClaims = onSnapshot(qClaims, (snap) => {
       try {
-        const claims = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+        const claims = snap.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data(),
+          userId: (doc.data() as any).userId || doc.ref.parent.parent?.id,
+          docPath: doc.ref.path 
+        } as any));
         setAttendanceClaims(claims);
       } catch (err) {
         console.error("Error processing attendance claims:", err);
@@ -338,7 +342,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
         if (auth.currentUser && viewedProfile?.userId) {
           const fallbackQuery = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
           onSnapshot(fallbackQuery, (s) => {
-            const claims = s.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceClaim));
+            const claims = s.docs.map(d => ({ 
+              id: d.id, 
+              ...d.data(), 
+              userId: viewedProfile.userId,
+              docPath: d.ref.path
+            } as any));
             setAttendanceClaims(claims);
           }, (fallbackErr) => {
              console.error("Attendance claims fallback error:", fallbackErr);
@@ -574,9 +583,11 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     }
   };
 
-  const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected') => {
+  const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected', claim: any) => {
     try {
-      await updateDoc(doc(db, 'attendanceClaims', claimId), {
+      // If we have docPath, use it. Otherwise guess based on userId.
+      const path = claim.docPath || `users/${claim.userId}/attendanceClaims/${claimId}`;
+      await updateDoc(doc(db, path), {
         status,
         updatedAt: serverTimestamp()
       });
@@ -649,7 +660,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
   const handleSaveEmployee = async (emp: UserProfile) => {
     try {
-      const userId = emp.userId || Date.now().toString();
+      // Use NIY or Email Slug for new legacy profiles if no ID exists yet
+      let userId = emp.userId;
+      if (!userId) {
+        const identifier = emp.niy || (emp.email ? emp.email.split('@')[0] : '');
+        userId = identifier ? `legacy_${identifier}` : `emp_${Date.now()}`;
+      }
+      
       const updatedEmp = { ...emp, userId, updatedAt: serverTimestamp() };
       
       const userRef = doc(db, 'users', userId);
@@ -681,12 +698,23 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   };
 
   const handleDeleteEmployee = async (userId: string) => {
-    if (!confirm('Hapus data karyawan ini secara permanen?')) return;
+    // Basic safety check for role
+    if (profile.role !== 'admin') {
+      alert('Akses Ditolak: Hanya Admin yang dapat menghapus data karyawan.');
+      return;
+    }
+
+    if (!confirm('Hapus data karyawan ini secara permanen? Seluruh dokumen users/' + userId + ' akan dihapus.')) return;
+    
     try {
+      // Direct deletion using the document ID
       await deleteDoc(doc(db, 'users', userId));
-      // State will update via onSnapshot listener in App.tsx or local listener
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'users');
+      alert('Data karyawan berhasil dihapus dari sistem.');
+      // The allEmployees state will automatically refresh via the onSnapshot listener running in useEffect
+    } catch (err: any) {
+      console.error("Detailed deletion error:", err);
+      // Tampilkan error asli dari Firebase sesuai permintaan user
+      alert(`Gagal menghapus data: ${err.message || 'Firestore error'}`);
     }
   };
   
@@ -1632,14 +1660,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                                     {isAdmin && claim.status === 'pending' && (
                                       <div className="flex items-center gap-2">
                                         <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'approved')}
+                                          onClick={() => handleUpdateClaimStatus(claim.id, 'approved', claim)}
                                           className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
                                           title="Setujui"
                                         >
                                           <ShieldCheck size={18} />
                                         </button>
                                         <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'rejected')}
+                                          onClick={() => handleUpdateClaimStatus(claim.id, 'rejected', claim)}
                                           className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
                                           title="Tolak"
                                         >

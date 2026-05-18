@@ -12,52 +12,65 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+        request.auth.token.email == "maudy@lazuardi.sch.id"
+      );
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (userId == request.auth.uid || isAdmin() || resource.data.email == request.auth.token.email);
+      allow read, list: if isSignedIn();
       allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (isAdmin() || request.query.filters.email == request.auth.token.email);
 
       match /profile/{docId} {
-        allow read, write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list: if isSignedIn();
+        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
       }
 
       match /emergencyContact/{docId} {
-        allow read, write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list: if isSignedIn();
+        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
       }
 
       match /careerProgress/{docId} {
-        allow read, write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list: if isSignedIn();
+        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
       }
 
       match /leaveCycles/{docId} {
-        allow read, write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list: if isSignedIn();
+        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
       }
 
       match /attendanceClaims/{docId} {
-        allow read, create, update, delete: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list, create, update, delete: if isSignedIn();
       }
 
       match /certificates/{docId} {
-        allow read: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list: if isSignedIn();
         allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
       }
 
       match /attendance/{docId} {
-        allow read, create, update, delete: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, list, create, update, delete: if isSignedIn();
       }
     }
 
     // Collection Group rules
     match /{path=**}/attendanceClaims/{docId} {
-      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, list, write: if isSignedIn();
     }
 
     match /{path=**}/certificates/{docId} {
-      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, list: if isSignedIn();
+    }
+
+    match /{path=**}/careerProgress/{docId} {
+      allow read, list: if isSignedIn();
+    }
+
+    match /{path=**}/leaveCycles/{docId} {
+      allow read, list: if isSignedIn();
     }
 
     match /dashboardStats/{docId} {
