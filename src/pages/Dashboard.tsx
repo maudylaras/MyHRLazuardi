@@ -707,6 +707,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     if (!confirm('Hapus data karyawan ini secara permanen? Seluruh dokumen users/' + userId + ' akan dihapus.')) return;
     
     try {
+      console.log("Attempting deletion of user:", userId, "by admin:", profile.userId, "role:", profile.role);
       // Direct deletion using the document ID
       await deleteDoc(doc(db, 'users', userId));
       alert('Data karyawan berhasil dihapus dari sistem.');

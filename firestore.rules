@@ -13,7 +13,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email.lower() == "maudy@lazuardi.sch.id") ||
+        request.auth.token.email.lower() == "maudy@lazuardi.sch.id" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
       );
@@ -21,7 +21,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      allow create, update: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() || request.auth.token.email.lower() == "maudy@lazuardi.sch.id";
 
       match /profile/{docId} {
         allow read, list: if isSignedIn();
