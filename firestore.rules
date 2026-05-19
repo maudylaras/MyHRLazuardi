@@ -13,14 +13,15 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
-        request.auth.token.email == "maudy@lazuardi.sch.id"
+        (request.auth.token.email.lower() == "maudy@lazuardi.sch.id") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
       );
     }
 
     match /users/{userId} {
       allow read, list: if isSignedIn();
-      allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if isSignedIn() && (userId == request.auth.uid || isAdmin());
 
       match /profile/{docId} {
         allow read, list: if isSignedIn();
