@@ -2,5 +2,5 @@
   "name": "MyHR Lazuardi",
   "description": "Sistem informasi SDM Lazuardi untuk presensi dan manajemen karyawan.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

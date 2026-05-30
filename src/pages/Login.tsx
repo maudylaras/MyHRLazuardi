@@ -5,12 +5,11 @@ import { signUp, signIn, resetPassword } from '../lib/firebase';
 
 interface LoginProps {
   onLogin: () => void;
-  externalError?: string | null;
 }
 
 type AuthMode = 'login' | 'signup' | 'forgot-password';
 
-export default function Login({ onLogin, externalError }: LoginProps) {
+export default function Login({ onLogin }: LoginProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,9 +68,9 @@ export default function Login({ onLogin, externalError }: LoginProps) {
             onSubmit={handleSubmit} 
             className="space-y-6"
           >
-            {(error || externalError) && (
+            {error && (
               <div className="rounded-xl bg-red-50 p-4 text-xs font-semibold text-red-600 border border-red-100">
-                {error || externalError}
+                {error}
               </div>
             )}
             

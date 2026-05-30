@@ -7,72 +7,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
     function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+      return request.auth.uid == uid;
     }
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email.lower() == "maudy@lazuardi.sch.id" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
+        (request.auth.token.email == "maudy@lazuardi.sch.id" && request.auth.token.email_verified == true) ||
+        (request.auth.token.email == "hrd@lazuardi.sch.id" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
       );
     }
 
-    match /users/{userId} {
-      allow read, list: if isSignedIn();
-      allow create, update: if isSignedIn() && (userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin() || request.auth.token.email.lower() == "maudy@lazuardi.sch.id";
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
 
       match /profile/{docId} {
-        allow read, list: if isSignedIn();
-        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /emergencyContact/{docId} {
-        allow read, list: if isSignedIn();
-        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /careerProgress/{docId} {
-        allow read, list: if isSignedIn();
-        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /leaveCycles/{docId} {
-        allow read, list: if isSignedIn();
-        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /attendanceClaims/{docId} {
-        allow read, list, create, update, delete: if isSignedIn();
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /certificates/{docId} {
-        allow read, list: if isSignedIn();
-        allow write: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /competencies/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /careerReadiness/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      }
+
+      match /developmentRecords/{docId} {
+        allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
 
       match /attendance/{docId} {
-        allow read, list, create, update, delete: if isSignedIn();
+        allow read, create, update, delete: if isSignedIn() && (isOwner(uid) || isAdmin());
       }
     }
 
-    // Collection Group rules
+    // Collection Group rule for attendanceClaims
     match /{path=**}/attendanceClaims/{docId} {
-      allow read, list, write: if isSignedIn();
-    }
-
-    match /{path=**}/certificates/{docId} {
-      allow read, list: if isSignedIn();
-    }
-
-    match /{path=**}/careerProgress/{docId} {
-      allow read, list: if isSignedIn();
-    }
-
-    match /{path=**}/leaveCycles/{docId} {
-      allow read, list: if isSignedIn();
+      allow list: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
     }
 
     match /dashboardStats/{docId} {
@@ -81,23 +86,23 @@ service cloud.firestore {
     }
 
     match /policyCategories/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /policyItems/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /helpCategories/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /faqItems/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
   }
 }

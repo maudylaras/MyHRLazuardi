@@ -32,10 +32,6 @@ export interface UserProfile {
   cutiData?: { tahunan: number; besar: number };
   longServiceLeave?: LongServiceCycle[];
   createdAt: string;
-  authUid?: string;
-  linkedProfileId?: string;
-  profileLinkedAt?: any;
-  updatedAt?: any;
 }
 
 export interface RegulationItem {
@@ -134,4 +130,33 @@ export interface Certification {
   date: string;
   photoUrl?: string;
   createdAt: string;
+}
+
+export interface Competency {
+  id: string;
+  competencyName: string;
+  currentLevel: number;
+  targetLevel: number;
+  category: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface CareerReadiness {
+  currentRole: string;
+  nextRole: string;
+  readinessScore: number;
+  competenciesToImprove: string[];
+  updatedAt?: any;
+}
+
+export interface DevelopmentRecord {
+  id: string;
+  type: 'certificate' | 'training' | 'award';
+  title: string;
+  provider: string;
+  issueDate: string;
+  attachmentUrl: string;
+  createdAt?: any;
+  updatedAt?: any;
 }

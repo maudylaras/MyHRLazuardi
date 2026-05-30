@@ -10,7 +10,10 @@ import {
   FaqCategory,
   RegulationItem,
   FaqItem,
-  Certification
+  Certification,
+  Competency,
+  CareerReadiness,
+  DevelopmentRecord
 } from '../types';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { ALL_EMPLOYEES } from '../data/employees';
@@ -19,6 +22,7 @@ import {
   query, 
   where, 
   getDocs, 
+  addDoc, 
   updateDoc, 
   setDoc,
   deleteDoc,
@@ -158,6 +162,23 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [regulationCategories, setRegulationCategories] = useState<RegulationCategory[]>([]);
   const [faqCategories, setFaqCategories] = useState<FaqCategory[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
+  const [competencies, setCompetencies] = useState<Competency[]>([]);
+  const [careerReadiness, setCareerReadiness] = useState<CareerReadiness | null>(null);
+  const [developmentRecords, setDevelopmentRecords] = useState<DevelopmentRecord[]>([]);
+  const [isEditingCompetency, setIsEditingCompetency] = useState(false);
+  const [selectedCompetency, setSelectedCompetency] = useState<Competency | null>(null);
+  const [devRecordTab, setDevRecordTab] = useState<'certificate' | 'training' | 'award'>('certificate');
+  const [selectedDevRecordDetail, setSelectedDevRecordDetail] = useState<DevelopmentRecord | null>(null);
+  
+  const [isEditingReadiness, setIsEditingReadiness] = useState(false);
+  const [isEditingDevRecord, setIsEditingDevRecord] = useState(false);
+  const [selectedDevRecord, setSelectedDevRecord] = useState<DevelopmentRecord | null>(null);
+
+  const selectedEmployeeUid = viewedProfile?.userId !== auth.currentUser?.uid ? viewedProfile?.userId : null;
+  const targetUid = isAdmin && selectedEmployeeUid
+    ? selectedEmployeeUid
+    : (auth.currentUser?.uid || '');
+
   const [isEditingRegCategory, setIsEditingRegCategory] = useState(false);
   const [isEditingRegItem, setIsEditingRegItem] = useState(false);
   const [isEditingFaqCategory, setIsEditingFaqCategory] = useState(false);
@@ -175,77 +196,51 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const [activeFaqTab, setActiveFaqTab] = useState<string>('ALL');
 
   useEffect(() => {
-    // Only run if we have a valid user and profile and auth is ready
-    if (!user || !profile?.userId || !auth.currentUser) return;
-
     // Listen for regulation categories
     const qReg = query(collection(db, 'policyCategories'), orderBy('createdAt', 'asc'));
     const unsubReg = onSnapshot(qReg, async (snap) => {
-      try {
-        const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-        
-        // Fetch items for each category
-        const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
-          if (!auth.currentUser) return null;
-          const itemSnap = await getDocs(query(collection(db, 'policyItems'), where('categoryId', '==', cat.id)));
-          return {
-            ...cat,
-            title: cat.name,
-            items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-          } as RegulationCategory;
-        }));
-        
-        setRegulationCategories(categoriesWithItems.filter(Boolean) as RegulationCategory[]);
-      } catch (err) {
-        console.error("Error processing regulation categories:", err);
-      }
+      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      // Fetch items for each category
+      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+        const itemSnap = await getDocs(query(collection(db, 'policyItems'), where('categoryId', '==', cat.id)));
+        return {
+          ...cat,
+          title: cat.name,
+          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        } as RegulationCategory;
+      }));
+      
+      setRegulationCategories(categoriesWithItems);
     }, (err) => {
-      // Only report if we are still signed in
-      if (auth.currentUser) {
-        handleFirestoreError(err, OperationType.LIST, 'policyCategories');
-      }
+      handleFirestoreError(err, OperationType.LIST, 'policyCategories');
     });
     
     // Listen for help categories
     const qHelp = query(collection(db, 'helpCategories'), orderBy('createdAt', 'asc'));
     const unsubFaq = onSnapshot(qHelp, async (snap) => {
-      try {
-        const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-        
-        const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
-          if (!auth.currentUser) return null;
-          const itemSnap = await getDocs(query(collection(db, 'faqItems'), where('categoryId', '==', cat.id)));
-          return {
-            ...cat,
-            title: cat.name,
-            items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-          } as FaqCategory;
-        }));
-        
-        setFaqCategories(categoriesWithItems.filter(Boolean) as FaqCategory[]);
-      } catch (err) {
-        console.error("Error processing help categories:", err);
-      }
+      const catsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      
+      const categoriesWithItems = await Promise.all(catsData.map(async (cat: any) => {
+        const itemSnap = await getDocs(query(collection(db, 'faqItems'), where('categoryId', '==', cat.id)));
+        return {
+          ...cat,
+          title: cat.name,
+          items: itemSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        } as FaqCategory;
+      }));
+      
+      setFaqCategories(categoriesWithItems);
     }, (err) => {
-      if (auth.currentUser) {
-        handleFirestoreError(err, OperationType.LIST, 'helpCategories');
-      }
+      handleFirestoreError(err, OperationType.LIST, 'helpCategories');
     });
 
     // Listen for all employees if admin
     let unsubEmployees: () => void = () => {};
-    if (isAdmin && auth.currentUser) {
+    if (isAdmin) {
       unsubEmployees = onSnapshot(collection(db, 'users'), (snap) => {
-        try {
-          const employees = snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile));
-          setAllEmployees(employees);
-        } catch (err) {
-          console.error("Error processing all employees:", err);
-        }
-      }, (err) => {
-        if (auth.currentUser) {
-          console.warn("Error listening to all employees:", err);
-        }
+        const employees = snap.docs.map(doc => ({ userId: doc.id, ...doc.data() } as UserProfile));
+        setAllEmployees(employees);
       });
     }
 
@@ -254,117 +249,186 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       unsubFaq();
       unsubEmployees();
     };
-  }, [isAdmin, user?.uid, profile?.userId, auth.currentUser]);
+  }, [isAdmin]);
 
   // Listen for specific data when viewedProfile changes
   useEffect(() => {
-    // CRITICAL: Ensure we have both viewedProfile.userId and current authenticated user
-    if (!viewedProfile?.userId || !auth.currentUser) {
-      console.log("Dashboard: Skipping listeners, missing identifiers", { 
-        viewedId: viewedProfile?.userId, 
-        authId: auth.currentUser?.uid 
-      });
-      return;
-    }
-
-    console.log("Dashboard: Starting listeners for", viewedProfile.userId);
+    if (!auth.currentUser || !viewedProfile?.userId) return;
 
     // Certificates
-    const qCert = query(collection(db, `users/${viewedProfile.userId}/certificates`), orderBy('createdAt', 'desc'));
+    const qCert = query(collection(db, `users/${targetUid}/certificates`), orderBy('createdAt', 'desc'));
     const unsubCert = onSnapshot(qCert, (snap) => {
-      try {
-        const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
-        setCertifications(certs);
-      } catch (err) {
-        console.error("Error processing certificates:", err);
-      }
+      const certs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Certification));
+      setCertifications(certs);
     }, (err) => {
-      if (auth.currentUser) {
-        handleFirestoreError(err, OperationType.LIST, 'certificates');
-      }
+      handleFirestoreError(err, OperationType.LIST, `users/${targetUid}/certificates`);
     });
 
     // Career Progress
-    const qCareer = query(collection(db, `users/${viewedProfile.userId}/careerProgress`), orderBy('order', 'asc'));
+    const qCareer = query(collection(db, `users/${targetUid}/careerProgress`), orderBy('order', 'asc'));
     const unsubCareer = onSnapshot(qCareer, (snap) => {
-      try {
-        const career = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CareerHistory));
-        setCareerHistory(career);
-      } catch (err) {
-        console.error("Error processing career progress:", err);
-      }
+      const career = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CareerHistory));
+      setCareerHistory(career);
     }, (err) => {
-      if (auth.currentUser) {
-        console.warn("Error listening to career progress:", err);
-      }
+      handleFirestoreError(err, OperationType.LIST, `users/${targetUid}/careerProgress`);
     });
 
     // Leave Cycles
-    const qLeave = query(collection(db, `users/${viewedProfile.userId}/leaveCycles`), orderBy('createdAt', 'asc'));
+    const qLeave = query(collection(db, `users/${targetUid}/leaveCycles`), orderBy('createdAt', 'asc'));
     const unsubLeave = onSnapshot(qLeave, (snap) => {
-      try {
-        const leave = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-        setLeaveEntitlements(leave);
-      } catch (err) {
-        console.error("Error processing leave cycles:", err);
-      }
+      const leave = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      setLeaveEntitlements(leave);
     }, (err) => {
-      if (auth.currentUser) {
-         console.warn("Error listening to leave cycles:", err);
-      }
+      handleFirestoreError(err, OperationType.LIST, `users/${targetUid}/leaveCycles`);
     });
 
-    // Attendance Claims
-    let qClaims;
-    if (isAdmin && showAllClaims && auth.currentUser) {
-      qClaims = query(collectionGroup(db, 'attendanceClaims'), orderBy('createdAt', 'desc'));
-    } else {
-      qClaims = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
-    }
-    
-    // Note: collectionGroup requires an index. If it fails, fallback to simple query or single user view.
-    const unsubClaims = onSnapshot(qClaims, (snap) => {
-      try {
-        const claims = snap.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data(),
-          userId: (doc.data() as any).userId || doc.ref.parent.parent?.id,
-          docPath: doc.ref.path 
-        } as any));
-        setAttendanceClaims(claims);
-      } catch (err) {
-        console.error("Error processing attendance claims:", err);
+    // Competencies
+    const qComp = query(collection(db, `users/${targetUid}/competencies`), orderBy('createdAt', 'desc'));
+    const unsubComp = onSnapshot(qComp, (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Competency));
+      setCompetencies(list);
+    }, (err) => {
+      // Non-blocking fallback
+      console.warn('Error fetching competencies, utilizing empty state:', err);
+      setCompetencies([]);
+    });
+
+    // Career Readiness
+    const unsubReadiness = onSnapshot(doc(db, 'users', targetUid, 'careerReadiness', 'main'), (docSnap) => {
+      if (docSnap.exists()) {
+        setCareerReadiness(docSnap.data() as CareerReadiness);
+      } else {
+        setCareerReadiness(null);
       }
     }, (err) => {
-      // Fallback if collectionGroup index is missing
-      if (err.message.includes('index')) {
-        console.warn('CollectionGroup index missing for attendanceClaims');
-        if (auth.currentUser && viewedProfile?.userId) {
-          const fallbackQuery = query(collection(db, `users/${viewedProfile.userId}/attendanceClaims`), orderBy('createdAt', 'desc'));
-          onSnapshot(fallbackQuery, (s) => {
-            const claims = s.docs.map(d => ({ 
-              id: d.id, 
-              ...d.data(), 
-              userId: viewedProfile.userId,
-              docPath: d.ref.path
-            } as any));
-            setAttendanceClaims(claims);
-          }, (fallbackErr) => {
-             console.error("Attendance claims fallback error:", fallbackErr);
-          });
-        }
-      } else if (auth.currentUser) {
-        handleFirestoreError(err, OperationType.LIST, 'attendanceClaims');
-      }
+      console.warn('Error fetching career readiness, utilizing empty state:', err);
+      setCareerReadiness(null);
+    });
+
+    // Development Records
+    const qDevRec = query(collection(db, `users/${targetUid}/developmentRecords`), orderBy('createdAt', 'desc'));
+    const unsubDevRec = onSnapshot(qDevRec, (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DevelopmentRecord));
+      setDevelopmentRecords(list);
+    }, (err) => {
+      console.warn('Error fetching development records, utilizing empty state:', err);
+      setDevelopmentRecords([]);
     });
 
     return () => {
       unsubCert();
       unsubCareer();
       unsubLeave();
-      unsubClaims();
+      unsubComp();
+      unsubReadiness();
+      unsubDevRec();
     };
-  }, [viewedProfile?.userId, isAdmin, showAllClaims, auth.currentUser]);
+  }, [viewedProfile?.userId, isAdmin, auth.currentUser, targetUid]);
+
+  // Dedicated useEffect to listen for Attendance Claims safely without using CollectionGroup query.
+  // This avoids index errors, Firestore permission errors, and satisfies both normal and admin users.
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const getTimestampMs = (val: any): number => {
+      if (!val) return 0;
+      if (typeof val.toDate === 'function') {
+        return val.toDate().getTime();
+      }
+      if (val.seconds) {
+        return val.seconds * 1000 + (val.nanoseconds ? val.nanoseconds / 1000000 : 0);
+      }
+      if (val instanceof Date) {
+        return val.getTime();
+      }
+      if (typeof val === 'string' || typeof val === 'number') {
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+      }
+      return 0;
+    };
+
+    if (!isAdmin) {
+      // Normal employee: read from users/{uid}/attendanceClaims
+      const q = query(
+        collection(db, 'users', auth.currentUser.uid, 'attendanceClaims'),
+        orderBy('createdAt', 'desc')
+      );
+      const unsub = onSnapshot(q, (snap) => {
+        const claims = snap.docs.map(doc => ({
+          id: doc.id,
+          userId: auth.currentUser.uid,
+          ...doc.data()
+        } as AttendanceClaim));
+        setAttendanceClaims(claims);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, `users/${auth.currentUser.uid}/attendanceClaims`);
+      });
+      return unsub;
+    }
+
+    // Admin flow
+    if (showAllClaims) {
+      // Load all employees' attendanceClaims individually
+      const uids = allEmployees.map(e => e.userId).filter(Boolean);
+      if (auth.currentUser.uid && !uids.includes(auth.currentUser.uid)) {
+        uids.push(auth.currentUser.uid);
+      }
+
+      if (uids.length === 0) {
+        setAttendanceClaims([]);
+        return;
+      }
+
+      const claimsByUid: Record<string, AttendanceClaim[]> = {};
+      const unsubs = uids.map(uid => {
+        const q = query(
+          collection(db, 'users', uid, 'attendanceClaims'),
+          orderBy('createdAt', 'desc')
+        );
+        return onSnapshot(q, (snap) => {
+          claimsByUid[uid] = snap.docs.map(doc => ({
+            id: doc.id,
+            userId: uid,
+            ...doc.data()
+          } as AttendanceClaim));
+
+          // Flatten and sort/merge all claims in claimsByUid
+          const allClaims: AttendanceClaim[] = [];
+          for (const key of Object.keys(claimsByUid)) {
+            allClaims.push(...claimsByUid[key]);
+          }
+          // Sort by createdAt desc
+          allClaims.sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt));
+          setAttendanceClaims(allClaims);
+        }, (err) => {
+          console.warn(`Error fetching claims for user ${uid}:`, err);
+        });
+      });
+
+      return () => {
+        unsubs.forEach(unsub => unsub());
+      };
+    } else {
+      // showAllClaims is false: only load claims for specific viewed profile or current profile
+      const targetClaimsUid = viewedProfile?.userId || auth.currentUser.uid;
+      const q = query(
+        collection(db, 'users', targetClaimsUid, 'attendanceClaims'),
+        orderBy('createdAt', 'desc')
+      );
+      const unsub = onSnapshot(q, (snap) => {
+        const claims = snap.docs.map(doc => ({
+          id: doc.id,
+          userId: targetClaimsUid,
+          ...doc.data()
+        } as AttendanceClaim));
+        setAttendanceClaims(claims);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, `users/${targetClaimsUid}/attendanceClaims`);
+      });
+      return unsub;
+    }
+  }, [isAdmin, showAllClaims, allEmployees, auth.currentUser?.uid, viewedProfile?.userId]);
 
   // Sync profileForm when viewedProfile changes
   useEffect(() => {
@@ -466,10 +530,9 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
   const handleSaveCertification = async (cert: Partial<Certification>) => {
     try {
-      const id = cert.id || doc(collection(db, `users/${viewedProfile.userId}/certificates`)).id;
-      await setDoc(doc(db, `users/${viewedProfile.userId}/certificates`, id), {
+      const id = cert.id || doc(collection(db, `users/${targetUid}/certificates`)).id;
+      await setDoc(doc(db, `users/${targetUid}/certificates`, id), {
         ...cert,
-        userId: viewedProfile.userId,
         createdAt: cert.createdAt || serverTimestamp()
       }, { merge: true });
       setIsEditingCertification(false);
@@ -481,9 +544,90 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   const handleDeleteCertification = async (id: string) => {
     if (!confirm('Hapus sertifikat ini?')) return;
     try {
-      await deleteDoc(doc(db, `users/${viewedProfile.userId}/certificates`, id));
+      await deleteDoc(doc(db, `users/${targetUid}/certificates`, id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'certificates');
+    }
+  };
+
+  const handleSaveCompetency = async (comp: Partial<Competency>) => {
+    try {
+      if (!auth.currentUser) return;
+      const id = comp.id || doc(collection(db, 'users', targetUid, 'competencies')).id;
+      const cleanComp = {
+        competencyName: comp.competencyName || '',
+        currentLevel: Number(comp.currentLevel) || 1,
+        targetLevel: Number(comp.targetLevel) || 1,
+        category: comp.category || '',
+        updatedAt: serverTimestamp(),
+        createdAt: comp.createdAt || serverTimestamp()
+      };
+      await setDoc(doc(db, 'users', targetUid, 'competencies', id), cleanComp, { merge: true });
+      setIsEditingCompetency(false);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, `users/${targetUid}/competencies`);
+    }
+  };
+
+  const handleDeleteCompetency = async (id: string) => {
+    try {
+      if (!auth.currentUser) return;
+      await deleteDoc(doc(db, 'users', targetUid, 'competencies', id));
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, `users/${targetUid}/competencies`);
+    }
+  };
+
+  const handleSaveCareerReadiness = async (readiness: Partial<CareerReadiness>) => {
+    try {
+      if (!auth.currentUser) return;
+      const cleanData = {
+        currentRole: readiness.currentRole || 'Staf HRD',
+        nextRole: readiness.nextRole || 'Senior HR Officer',
+        readinessScore: Number(readiness.readinessScore) || 0,
+        competenciesToImprove: readiness.competenciesToImprove || [],
+        updatedAt: serverTimestamp()
+      };
+      await setDoc(doc(db, 'users', targetUid, 'careerReadiness', 'main'), cleanData, { merge: true });
+      setIsEditingReadiness(false);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, `users/${targetUid}/careerReadiness`);
+    }
+  };
+
+  const handleSaveDevelopmentRecord = async (record: Partial<DevelopmentRecord>) => {
+    try {
+      if (!auth.currentUser) return;
+      const id = record.id || doc(collection(db, 'users', targetUid, 'developmentRecords')).id;
+      const cleanRecord = {
+        type: record.type || 'certificate',
+        title: record.title || '',
+        provider: record.provider || '',
+        issueDate: record.issueDate || '',
+        attachmentUrl: record.attachmentUrl || '',
+        updatedAt: serverTimestamp(),
+        createdAt: record.createdAt || serverTimestamp()
+      };
+      await setDoc(doc(db, 'users', targetUid, 'developmentRecords', id), cleanRecord, { merge: true });
+      setIsEditingDevRecord(false);
+      setSelectedDevRecord(null);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, `users/${targetUid}/developmentRecords`);
+    }
+  };
+
+  const handleDeleteDevelopmentRecord = async (id: string) => {
+    if (!confirm('Hapus program pengembangan ini?')) return;
+    try {
+      if (!auth.currentUser) return;
+      await deleteDoc(doc(db, 'users', targetUid, 'developmentRecords', id));
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, `users/${targetUid}/developmentRecords`);
     }
   };
 
@@ -572,7 +716,6 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           const id = cycle.id || doc(subCollRef).id;
           await setDoc(doc(db, `users/${viewedProfile.userId}/leaveCycles`, id), {
             ...cycle,
-            userId: viewedProfile.userId,
             updatedAt: serverTimestamp()
           }, { merge: true });
         }
@@ -583,16 +726,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     }
   };
 
-  const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected', claim: any) => {
+  const handleUpdateClaimStatus = async (claimId: string, employeeUid: string, status: 'approved' | 'rejected') => {
     try {
-      // If we have docPath, use it. Otherwise guess based on userId.
-      const path = claim.docPath || `users/${claim.userId}/attendanceClaims/${claimId}`;
-      await updateDoc(doc(db, path), {
+      await updateDoc(doc(db, 'users', employeeUid, 'attendanceClaims', claimId), {
         status,
         updatedAt: serverTimestamp()
       });
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'attendanceClaims');
+      handleFirestoreError(err, OperationType.UPDATE, `users/${employeeUid}/attendanceClaims`);
     }
   };
 
@@ -660,13 +801,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
   const handleSaveEmployee = async (emp: UserProfile) => {
     try {
-      // Use NIY or Email Slug for new legacy profiles if no ID exists yet
-      let userId = emp.userId;
-      if (!userId) {
-        const identifier = emp.niy || (emp.email ? emp.email.split('@')[0] : '');
-        userId = identifier ? `legacy_${identifier}` : `emp_${Date.now()}`;
-      }
-      
+      const userId = emp.userId || Date.now().toString();
       const updatedEmp = { ...emp, userId, updatedAt: serverTimestamp() };
       
       const userRef = doc(db, 'users', userId);
@@ -697,25 +832,75 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     }
   };
 
-  const handleDeleteEmployee = async (userId: string) => {
-    // Basic safety check for role
-    if (profile.role !== 'admin') {
-      alert('Akses Ditolak: Hanya Admin yang dapat menghapus data karyawan.');
-      return;
-    }
+  useEffect(() => {
+    if (viewedProfile?.userId) {
+      /* Firestore disabled as per user request
+      const fetchProfile = async () => {
+        try {
+          const docRef = doc(db, 'users', viewedProfile.userId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data() as UserProfile;
+            setViewedProfile(data);
+            if (data.careerHistory) setCareerHistory(data.careerHistory);
+            if (data.cutiData) setCutiData(data.cutiData);
+            // Also sync in allEmployees list
+            setAllEmployees(prev => prev.map(e => e.userId === data.userId ? data : e));
+          }
+        } catch (err) {
+          console.error("Error fetching viewed profile:", err);
+        }
+      };
+      
+      fetchProfile();
 
-    if (!confirm('Hapus data karyawan ini secara permanen? Seluruh dokumen users/' + userId + ' akan dihapus.')) return;
-    
+      // Listen for leave cycles
+      const q = query(
+        collection(db, 'users', viewedProfile.userId, 'leaveCycles'),
+        orderBy('createdAt', 'asc')
+      );
+      
+      const unsubLeave = onSnapshot(q, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setLeaveEntitlements(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, `users/${viewedProfile.userId}/leaveCycles`);
+      });
+
+      // Listen for attendance claims
+      let claimsQuery;
+      
+      if (isAdmin && showAllClaims) {
+        claimsQuery = query(collectionGroup(db, 'attendanceClaims'), orderBy('createdAt', 'desc'));
+      } else {
+        claimsQuery = query(
+          collection(db, 'users', viewedProfile.userId, 'attendanceClaims'),
+          orderBy('createdAt', 'desc')
+        );
+      }
+
+      const unsubClaims = onSnapshot(claimsQuery, (snap) => {
+        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceClaim));
+        setAttendanceClaims(data);
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, `users/${viewedProfile.userId}/attendanceClaims`);
+      });
+
+      return () => {
+        unsubLeave();
+        unsubClaims();
+      };
+      */
+    }
+  }, [viewedProfile?.userId, isAdmin, showAllClaims]);
+
+  const handleDeleteEmployee = async (userId: string) => {
+    if (!confirm('Hapus data karyawan ini secara permanen?')) return;
     try {
-      console.log("Attempting deletion of user:", userId, "by admin:", profile.userId, "role:", profile.role);
-      // Direct deletion using the document ID
       await deleteDoc(doc(db, 'users', userId));
-      alert('Data karyawan berhasil dihapus dari sistem.');
-      // The allEmployees state will automatically refresh via the onSnapshot listener running in useEffect
-    } catch (err: any) {
-      console.error("Detailed deletion error:", err);
-      // Tampilkan error asli dari Firebase sesuai permintaan user
-      alert(`Gagal menghapus data: ${err.message || 'Firestore error'}`);
+      // State will update via onSnapshot listener in App.tsx or local listener
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'users');
     }
   };
   
@@ -796,7 +981,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
           <SidebarItem id="karir" icon={<Trophy size={22} />} label="Progress Karir" />
           <SidebarItem id="cuti" icon={<Calendar size={22} />} label="Cuti Besar" />
           <SidebarItem id="klaim" icon={<Fingerprint size={22} />} label="Klaim Absensi" />
-          <SidebarItem id="certification" icon={<Award size={22} />} label="Sertifikat" />
+          <SidebarItem id="certification" icon={<Award size={22} />} label="Development Program" />
           <SidebarItem id="regulasi" icon={<BookOpen size={22} />} label="Regulasi" />
         </nav>
 
@@ -821,7 +1006,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
               {activeTab === 'data-diri' ? 'Karyawan Profile' : 
                activeTab === 'cuti' ? 'Cuti Besar' : 
                activeTab === 'regulasi' ? 'Regulasi & Kebijakan' : 
-               activeTab === 'certification' ? 'Sertifikat Saya' : 'Dashboard Hub'}
+               activeTab === 'certification' ? 'Development Program' : 'Dashboard Hub'}
             </h2>
           </div>
           
@@ -881,6 +1066,77 @@ export default function Dashboard({ user, profile }: DashboardProps) {
             data={viewedProfile}
             onSave={handleSaveCuti}
           />
+
+          <EditCompetencyModal
+            isOpen={isEditingCompetency}
+            onClose={() => { setIsEditingCompetency(false); setSelectedCompetency(null); }}
+            data={selectedCompetency}
+            onSave={handleSaveCompetency}
+          />
+
+          <EditCareerReadinessModal
+            isOpen={isEditingReadiness}
+            onClose={() => setIsEditingReadiness(false)}
+            data={careerReadiness}
+            onSave={handleSaveCareerReadiness}
+          />
+
+          <EditDevRecordModal
+            isOpen={isEditingDevRecord}
+            onClose={() => { setIsEditingDevRecord(false); setSelectedDevRecord(null); }}
+            data={selectedDevRecord}
+            onSave={handleSaveDevelopmentRecord}
+          />
+
+          <Modal
+            isOpen={!!selectedDevRecordDetail}
+            onClose={() => setSelectedDevRecordDetail(null)}
+            title="Detail Program Pengembangan"
+          >
+            {selectedDevRecordDetail && (
+              <div className="space-y-6 text-left">
+                <div className="space-y-1">
+                  <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                    {selectedDevRecordDetail.type.toUpperCase()}
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight pt-2">
+                    {selectedDevRecordDetail.title}
+                  </h3>
+                </div>
+                
+                <div className="space-y-4 bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 shadow-none">Penyelenggara / Provider</p>
+                    <p className="text-sm font-bold text-slate-700">{selectedDevRecordDetail.provider}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 shadow-none">Tanggal Terbit / Pelaksanaan</p>
+                    <p className="text-sm font-bold text-slate-700">{selectedDevRecordDetail.issueDate}</p>
+                  </div>
+                  {selectedDevRecordDetail.attachmentUrl && (
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 shadow-none">Tautan Lampiran</p>
+                      <a 
+                        href={selectedDevRecordDetail.attachmentUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm font-bold text-blue-600 underline break-all flex items-center gap-1.5 hover:text-blue-700"
+                      >
+                        {selectedDevRecordDetail.attachmentUrl} <ExternalLink size={14} />
+                      </a>
+                    </div>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => setSelectedDevRecordDetail(null)}
+                  className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all hover:bg-slate-800"
+                >
+                  TUTUP
+                </button>
+              </div>
+            )}
+          </Modal>
 
           <EditRegCategoryModal 
             isOpen={isEditingRegCategory}
@@ -1661,14 +1917,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                                     {isAdmin && claim.status === 'pending' && (
                                       <div className="flex items-center gap-2">
                                         <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'approved', claim)}
+                                          onClick={() => handleUpdateClaimStatus(claim.id, claim.userId, 'approved')}
                                           className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
                                           title="Setujui"
                                         >
                                           <ShieldCheck size={18} />
                                         </button>
                                         <button 
-                                          onClick={() => handleUpdateClaimStatus(claim.id, 'rejected', claim)}
+                                          onClick={() => handleUpdateClaimStatus(claim.id, claim.userId, 'rejected')}
                                           className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
                                           title="Tolak"
                                         >
@@ -1730,14 +1986,22 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                       <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Kebijakan & Regulasi</h3>
                       <p className="text-sm font-medium text-slate-400 italic">Pedoman resmi dan tata tertib Lazuardi HR.</p>
                     </div>
-                    {isAdmin && (
+                    <div className="flex items-center gap-3.5 flex-wrap justify-center md:justify-end">
                       <button 
-                        onClick={() => { setSelectedRegCategory(null); setIsEditingRegCategory(true); }}
-                        className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all"
+                        onClick={() => window.open('mailto:hr@lazuardi.sch.id?subject=Bantuan HR')}
+                        className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 hover:scale-[1.03] active:scale-95 transition-all text-center"
                       >
-                        + Tambah Kategori
+                        <Phone size={14} /> Tanyakan langsung
                       </button>
-                    )}
+                      {isAdmin && (
+                        <button 
+                          onClick={() => { setSelectedRegCategory(null); setIsEditingRegCategory(true); }}
+                          className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-900 font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all"
+                        >
+                          + Tambah Kategori
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="rounded-[48px] bg-indigo-600 p-12 lg:p-16 text-white shadow-2xl relative overflow-hidden group">
@@ -1750,9 +2014,14 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                           <span className="text-[10px] font-black uppercase tracking-widest">Portal Utama Peraturan</span>
                         </div>
                         <h4 className="text-5xl font-black tracking-tighter leading-[1.1]">Pedoman Lengkap Peraturan Karyawan</h4>
-                        <p className="text-indigo-100 text-lg font-medium leading-relaxed opacity-80">
-                          Akses portal resmi untuk meninjau seluruh peraturan, kebijakan, tata tertib, dan regulasi ketenagakerjaan di lingkungan Lazuardi.
-                        </p>
+                        <div className="space-y-3">
+                          <p className="text-indigo-100 text-lg font-medium leading-relaxed opacity-80">
+                            Akses portal resmi untuk meninjau seluruh peraturan, kebijakan, tata tertib, dan regulasi ketenagakerjaan di lingkungan Lazuardi.
+                          </p>
+                          <p className="text-indigo-100/90 text-sm font-semibold leading-relaxed">
+                            Karyawan dapat memberikan masukan atau feedback terkait pemahaman dan penerapan regulasi melalui form feedback.
+                          </p>
+                        </div>
                         <div className="flex flex-wrap items-center gap-4">
                           <a 
                             href="https://reflectionjournallessi.my.canva.site/peraturan-perusahaan"
@@ -1762,6 +2031,12 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                           >
                             Buka Portal Peraturan dan Internal Memo <ExternalLink size={20} />
                           </a>
+                          <button
+                            onClick={() => window.open("https://forms.gle/BKV7omdyvw8sYvpg6", "_blank", "noopener,noreferrer")}
+                            className="inline-flex items-center gap-3 px-10 py-5 bg-white/10 hover:bg-white/20 text-white border border-white/30 hover:border-white/60 font-black text-sm uppercase tracking-widest rounded-2xl hover:scale-105 transition-all"
+                          >
+                            Isi Feedback Karyawan <ExternalLink size={20} />
+                          </button>
                         </div>
                     </div>
                   </div>
@@ -1901,82 +2176,296 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                         ))}
                     </div>
 
-
+                    {/* Centered button has been moved to the top header as 'Tanyakan langsung' */}
                   </div>
                 </div>
               </motion.div>
             )}
 
-            {activeTab === 'certification' && (
-              <motion.div
-                key="certification"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-10"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2 text-left">
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Sertifikat dan Penghargaan</h3>
-                    <p className="text-sm font-medium text-slate-400 italic">Daftar sertifikat dan penghargaan profesional yang Anda miliki.</p>
-                  </div>
-                  <button 
-                    onClick={() => { setSelectedCertification(null); setIsEditingCertification(true); }}
-                    className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-100 hover:scale-105 active:scale-95 transition-all"
-                  >
-                    <Plus size={18} /> Tambah Sertifikat
-                  </button>
-                </div>
+            {activeTab === 'certification' && (() => {
+              const readinessData = careerReadiness || {
+                currentRole: viewedProfile?.position || 'Staf HRD',
+                nextRole: 'Senior HR Officer',
+                readinessScore: 78,
+                competenciesToImprove: ['Performance Management', 'Strategic HR Planning', 'Data Analytics']
+              };
 
-                {certifications.length === 0 ? (
-                  <div className="rounded-[48px] bg-white border-2 border-dashed border-slate-100 p-20 text-center flex flex-col items-center gap-6">
-                    <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center text-slate-200">
-                      <Award size={48} />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xl font-bold text-slate-900">Belum ada sertifikat</p>
-                      <p className="text-sm text-slate-400 max-w-sm">Anda belum menambahkan sertifikat apapun. Klik tombol di atas untuk memulai.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {certifications.map((cert) => (
-                      <div key={cert.id} className="group relative bg-white rounded-[40px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-blue-100/50 transition-all">
-                        <div className="aspect-[4/3] bg-slate-50 overflow-hidden relative">
-                          {cert.photoUrl ? (
-                            <img src={cert.photoUrl} alt={cert.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-200">
-                              <FileText size={64} />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <div className="p-8 space-y-4 text-left">
-                          <div className="space-y-1">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none pt-0.5">{formatDate(cert.date)}</p>
-                            <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase line-clamp-2">{cert.name}</h4>
+              const filteredDevRec = developmentRecords.filter(rec => rec.type === devRecordTab);
+
+              return (
+                <motion.div
+                  key="certification"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-10 text-slate-800"
+                >
+                  <p className="hidden">DEVELOPMENT PROGRAM HUB</p>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Kompetensi Saya Card */}
+                    <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1 text-left">
+                            <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase italic">Kompetensi Saya</h3>
+                            <p className="text-xs font-bold text-slate-400">Daftar kompetensi yang Anda miliki dan tingkat penguasaannya.</p>
                           </div>
-                          <div className="pt-4 flex items-center justify-between border-t border-slate-50">
-                            <button 
-                              onClick={() => { setSelectedCertification(cert); setIsEditingCertification(true); }}
-                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors"
+                          {(isAdmin || targetUid === auth.currentUser?.uid) && (
+                            <button
+                              onClick={() => { setSelectedCompetency(null); setIsEditingCompetency(true); }}
+                              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all text-center self-start"
+                            >
+                              <Plus size={14} /> Tambah Kompetensi
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-100">
+                                <th className="py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kompetensi</th>
+                                <th className="py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Level Ini</th>
+                                <th className="py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Level Target</th>
+                                <th className="py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</th>
+                                <th className="py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {competencies.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="py-8 text-center text-xs font-bold text-slate-400 italic">
+                                    Belum ada data kompetensi.
+                                  </td>
+                                </tr>
+                              ) : (
+                                competencies.map((comp) => {
+                                  const pct = Math.min(100, Math.round((comp.currentLevel / comp.targetLevel) * 100));
+                                  return (
+                                    <tr key={comp.id} className="border-b border-slate-50 last:border-0 animate-in fade-in">
+                                      <td className="py-4">
+                                        <p className="font-black text-slate-800 text-sm leading-tight">{comp.competencyName}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">{comp.category}</p>
+                                      </td>
+                                      <td className="py-4 text-center">
+                                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                          {comp.currentLevel}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 text-center">
+                                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-xs font-black text-blue-600 border border-blue-100">
+                                          {comp.targetLevel}
+                                        </span>
+                                      </td>
+                                      <td className="py-4 min-w-[100px]">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-full bg-slate-50 border border-slate-100 h-2 rounded-full overflow-hidden">
+                                            <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                                          </div>
+                                          <span className="text-[10px] font-black text-slate-500 font-mono">{pct}%</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-4 text-right">
+                                        <div className="flex items-center justify-end gap-2.5">
+                                          {(isAdmin || targetUid === auth.currentUser?.uid) ? (
+                                            <>
+                                              <button
+                                                onClick={() => { setSelectedCompetency(comp); setIsEditingCompetency(true); }}
+                                                className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors"
+                                              >
+                                                Edit
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteCompetency(comp.id)}
+                                                className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                                              >
+                                                Hapus
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <span className="text-[10px] font-bold text-slate-350">-</span>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Career Readiness Card */}
+                    <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1 text-left">
+                            <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase italicTitle">Career Readiness</h3>
+                            <p className="text-xs font-bold text-slate-400">Persiapan Anda untuk jenjang karir berikutnya.</p>
+                          </div>
+                          {(isAdmin || targetUid === auth.currentUser?.uid) && (
+                            <button
+                              onClick={() => setIsEditingReadiness(true)}
+                              className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all text-center self-start"
                             >
                               Edit Data
                             </button>
-                            <button 
-                              onClick={() => handleDeleteCertification(cert.id)}
-                              className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
-                            >
-                              Hapus
-                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-slate-50 border border-slate-100/60 rounded-2xl p-4 text-left">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none shadow-none">Jabatan Saat Ini</p>
+                            <p className="text-sm font-black text-slate-800 leading-tight uppercase">{readinessData.currentRole}</p>
+                          </div>
+                          <div className="bg-blue-50/30 border border-blue-50 rounded-2xl p-4 text-left">
+                            <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1 leading-none shadow-none">Target Jabatan</p>
+                            <p className="text-sm font-black text-blue-900 leading-tight uppercase">{readinessData.nextRole}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-5 bg-emerald-50/40 rounded-3xl p-6 border border-emerald-100/60 text-left">
+                          <div className="h-16 w-16 shrink-0 rounded-full bg-white border-2 border-emerald-500 flex items-center justify-center text-emerald-600 font-extrabold text-xl font-mono shadow-md">
+                            {readinessData.readinessScore}%
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Kesiapan Karir</p>
+                            <p className="text-xs font-bold text-slate-500 leading-relaxed mt-0.5">Nilai kesiapan karir dihitung berdasarkan tingkat pemenuhan target kompetensi yang didefinisikan.</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 text-left">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none shadow-none">Kompetensi yang Perlu Ditingkatkan</p>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {readinessData.competenciesToImprove && readinessData.competenciesToImprove.length > 0 ? (
+                              readinessData.competenciesToImprove.map((item, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-2 px-3.5 py-2 bg-rose-50/60 border border-rose-100/60 rounded-xl text-xs font-bold text-rose-700 animate-in fade-in">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" /> {item}
+                                </span>
+                              ))
+                            ) : (
+                              <p className="text-xs font-bold text-slate-400 italic">Semua kompetensi target terpenuhi!</p>
+                            )}
                           </div>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )}
-              </motion.div>
-            )}
+
+                  {/* Sertifikat, Pelatihan & Penghargaan Section */}
+                  <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm text-left">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-slate-50 mb-6">
+                      <div className="space-y-1">
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase italic">Sertifikat, Pelatihan & Penghargaan</h3>
+                        <p className="text-xs font-bold text-slate-400">Riwayat pengembangan kompetensi serta pengakuan profesional.</p>
+                      </div>
+                      {(isAdmin || targetUid === auth.currentUser?.uid) && (
+                        <button
+                          onClick={() => {
+                            setSelectedDevRecord(null);
+                            setIsEditingDevRecord(true);
+                          }}
+                          className="inline-flex items-center gap-2.5 px-6 py-4 bg-blue-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl shadow-xl shadow-blue-500/15 hover:scale-105 active:scale-95 transition-all text-center self-start"
+                        >
+                          <Plus size={16} /> Tambah Data
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Tabs row */}
+                    <div className="flex flex-wrap items-center gap-3 mb-8">
+                      {[
+                        { id: 'certificate', label: 'Sertifikat' },
+                        { id: 'training', label: 'Pelatihan' },
+                        { id: 'award', label: 'Penghargaan' }
+                      ].map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setDevRecordTab(t.id as any)}
+                          className={cn(
+                            "px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                            devRecordTab === t.id 
+                              ? "bg-slate-950 text-white border-slate-955 shadow-md" 
+                              : "bg-slate-50 text-slate-400 hover:bg-slate-100 border-slate-100 hover:text-slate-600"
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Records content */}
+                    {filteredDevRec.length === 0 ? (
+                      <div className="rounded-[32px] bg-slate-50/60 border-2 border-dashed border-slate-100 p-16 text-center flex flex-col items-center gap-5">
+                        <div className="h-16 w-16 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-300">
+                          <Award size={32} />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-base font-extrabold text-slate-800">
+                            Belum ada riwayat {devRecordTab === 'certificate' ? 'sertifikat' : devRecordTab === 'training' ? 'pelatihan' : 'penghargaan'}
+                          </p>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            Anda belum memiliki riwayat aktivitas di kategori ini.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredDevRec.map((rec) => (
+                          <div key={rec.id} className="bg-slate-50/20 rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between animate-in fade-in">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="px-2.5 py-1 bg-blue-50 text-blue-600 border border-blue-100/50 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                                  {rec.type === 'certificate' ? 'Sertifikat' : rec.type === 'training' ? 'Pelatihan' : 'Penghargaan'}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400 font-mono">
+                                  {rec.issueDate}
+                                </span>
+                              </div>
+                              <h4 className="text-base font-black text-slate-900 uppercase tracking-tight line-clamp-2 pt-1 leading-snug">{rec.title}</h4>
+                              <p className="text-xs font-bold text-slate-400">Penyelenggara: <span className="text-slate-600 font-extrabold">{rec.provider}</span></p>
+                            </div>
+                            
+                            <div className="pt-4 mt-5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                              <button
+                                onClick={() => {
+                                  if (rec.attachmentUrl && rec.attachmentUrl.startsWith('http')) {
+                                    window.open(rec.attachmentUrl, '_blank', 'noopener,noreferrer');
+                                  } else {
+                                    setSelectedDevRecordDetail(rec);
+                                  }
+                                }}
+                                className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+                              >
+                                Detail <ChevronRight size={12} className="relative top-[0.5px]" />
+                              </button>
+                              
+                              {(isAdmin || targetUid === auth.currentUser?.uid) && (
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={() => { setSelectedDevRecord(rec); setIsEditingDevRecord(true); }}
+                                    className="text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDevelopmentRecord(rec.id)}
+                                    className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors"
+                                  >
+                                    Hapus
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })()}
           </AnimatePresence>
         </div>
       </main>
@@ -2807,6 +3296,255 @@ function EditCertificationModal({ isOpen, onClose, data, onSave }: any) {
           className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all"
         >
           SIMPAN SERTIFIKAT
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditCompetencyModal({ isOpen, onClose, data, onSave }: { isOpen: boolean, onClose: () => void, data: any, onSave: (v: any) => void }) {
+  const [form, setForm] = useState<Partial<Competency>>({ competencyName: '', currentLevel: 1, targetLevel: 5, category: 'Technical' });
+
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+    } else {
+      setForm({ competencyName: '', currentLevel: 1, targetLevel: 5, category: 'Technical' });
+    }
+  }, [data, isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Kompetensi" : "Tambah Kompetensi"}>
+      <div className="space-y-6 text-left">
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nama Kompetensi</label>
+          <input
+            type="text"
+            value={form.competencyName || ''}
+            onChange={(e) => setForm({ ...form, competencyName: e.target.value })}
+            placeholder="Contoh: Performance Management, Data Analytics"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Kategori</label>
+          <select
+            value={form.category || 'Technical'}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          >
+            <option value="Technical">Technical</option>
+            <option value="Core">Core</option>
+            <option value="Soft Skill">Soft Skill</option>
+            <option value="Leadership">Leadership</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 font-bold select-none">Level Saat Ini</label>
+            <select
+              value={form.currentLevel || 1}
+              onChange={(e) => setForm({ ...form, currentLevel: Number(e.target.value) })}
+              className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+            >
+              {[1, 2, 3, 4, 5].map(lvl => (
+                <option key={lvl} value={lvl}>Level {lvl}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 font-bold select-none">Level Target</label>
+            <select
+              value={form.targetLevel || 5}
+              onChange={(e) => setForm({ ...form, targetLevel: Number(e.target.value) })}
+              className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+            >
+              {[1, 2, 3, 4, 5].map(lvl => (
+                <option key={lvl} value={lvl}>Level {lvl}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            if (!form.competencyName) {
+              return;
+            }
+            onSave(form);
+          }}
+          className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/15 hover:scale-[1.01] active:scale-95 transition-all text-xs tracking-widest uppercase mt-4"
+        >
+          SIMPAN KOMPETENSI
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditCareerReadinessModal({ isOpen, onClose, data, onSave }: { isOpen: boolean, onClose: () => void, data: any, onSave: (v: any) => void }) {
+  const [form, setForm] = useState<Partial<CareerReadiness>>({ currentRole: '', nextRole: '', readinessScore: 0, competenciesToImprove: [] });
+  const [improveInput, setImproveInput] = useState('');
+
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+      setImproveInput(data.competenciesToImprove?.join(', ') || '');
+    } else {
+      setForm({ currentRole: '', nextRole: '', readinessScore: 0, competenciesToImprove: [] });
+      setImproveInput('');
+    }
+  }, [data, isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Career Readiness">
+      <div className="space-y-6 text-left">
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Jabatan Saat Ini</label>
+          <input
+            type="text"
+            value={form.currentRole || ''}
+            onChange={(e) => setForm({ ...form, currentRole: e.target.value })}
+            placeholder="Contoh: Staf HRD"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Target Jabatan</label>
+          <input
+            type="text"
+            value={form.nextRole || ''}
+            onChange={(e) => setForm({ ...form, nextRole: e.target.value })}
+            placeholder="Contoh: Senior HR Officer"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Score Kesiapan (%)</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={form.readinessScore || 0}
+            onChange={(e) => setForm({ ...form, readinessScore: Number(e.target.value) })}
+            placeholder="Contoh: 75"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Kompetensi yang Perlu Ditingkatkan (Pisahkan dengan koma)</label>
+          <textarea
+            value={improveInput}
+            onChange={(e) => {
+              setImproveInput(e.target.value);
+              const items = e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+              setForm({ ...form, competenciesToImprove: items });
+            }}
+            placeholder="Contoh: Performance Management, Strategic HR Planning, Data Analytics"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none h-24 resize-none"
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            onSave(form);
+          }}
+          className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/15 hover:scale-[1.01] active:scale-95 transition-all text-xs tracking-widest uppercase mt-4"
+        >
+          SIMPAN DATA KESIAPAN
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditDevRecordModal({ isOpen, onClose, data, onSave }: { isOpen: boolean, onClose: () => void, data: any, onSave: (v: any) => void }) {
+  const [form, setForm] = useState<Partial<DevelopmentRecord>>({ type: 'certificate', title: '', provider: '', issueDate: '', attachmentUrl: '' });
+
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+    } else {
+      setForm({ type: 'certificate', title: '', provider: '', issueDate: '', attachmentUrl: '' });
+    }
+  }, [data, isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={data ? "Edit Data Pengembangan" : "Tambah Data Pengembangan"}>
+      <div className="space-y-6 text-left">
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Tipe Program</label>
+          <select
+            value={form.type || 'certificate'}
+            onChange={(e) => setForm({ ...form, type: e.target.value as any })}
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          >
+            <option value="certificate">Sertifikat</option>
+            <option value="training">Pelatihan</option>
+            <option value="award">Penghargaan</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nama Program / Kegiatan</label>
+          <input
+            type="text"
+            value={form.title || ''}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Contoh: Pelatihan HR Analytics, Sertifikasi CHRP"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Penyelenggara / Penerbit</label>
+          <input
+            type="text"
+            value={form.provider || ''}
+            onChange={(e) => setForm({ ...form, provider: e.target.value })}
+            placeholder="Contoh: BNSP, Lazuardi Corporate University"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Tanggal Terbit / Pelaksanaan</label>
+          <input
+            type="text"
+            value={form.issueDate || ''}
+            onChange={(e) => setForm({ ...form, issueDate: e.target.value })}
+            placeholder="Contoh: 12 Mei 2026 atau Mei 2026"
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Link Pendukung / Lampiran URL</label>
+          <input
+            type="text"
+            value={form.attachmentUrl || ''}
+            onChange={(e) => setForm({ ...form, attachmentUrl: e.target.value })}
+            placeholder="Contoh: https://drive.google.com/..."
+            className="w-full bg-slate-50 border border-slate-150 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-200 transition-all outline-none"
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            if (!form.title) {
+              return;
+            }
+            onSave(form);
+          }}
+          className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-500/15 hover:scale-[1.01] active:scale-95 transition-all text-xs tracking-widest uppercase mt-4"
+        >
+          SIMPAN DATA
         </button>
       </div>
     </Modal>

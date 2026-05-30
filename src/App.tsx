@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, signInWithGoogle, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile } from './types';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -11,71 +11,60 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        setAuthError(null); 
         setLoading(true);
         try {
-          const loginEmail = (firebaseUser.email || '').toLowerCase().trim();
-          
-          // 1. Check if document users/{currentUser.uid} already exists
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
           
           if (userSnap.exists()) {
-            // Already linked or UID-based profile
-            setProfile({ userId: userSnap.id, ...userSnap.data() } as UserProfile);
+            setProfile(userSnap.data() as UserProfile);
           } else {
-            // 2. If it does not exist, look for an old profile by normalized email
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('email', '==', loginEmail));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-              // Found old profile
-              const oldProfileDoc = querySnapshot.docs[0];
-              const oldProfileData = oldProfileDoc.data();
-              const oldProfileId = oldProfileDoc.id;
-
-              // 3. Create new document users/{currentUser.uid} copying all data
-              // We strictly preserve all existing fields, especially role
-              const newUser: any = {
-                ...oldProfileData,
-                userId: firebaseUser.uid,
-                authUid: firebaseUser.uid,
-                email: loginEmail,
-                linkedProfileId: oldProfileId,
-                profileLinkedAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                isLinkedProfile: true
-              };
-
-              await setDoc(userDocRef, newUser, { merge: true });
-              
-              setProfile(newUser as UserProfile);
-            } else {
-              // 4. No profile found by email - Access Denied
-              setAuthError("Your account is not registered. Please contact HR Admin.");
-              await auth.signOut();
-              setUser(null);
-              setProfile(null);
-            }
+            // Create user document if it does not exist
+            const newUser: UserProfile = {
+              userId: firebaseUser.uid,
+              name: firebaseUser.displayName || 'User',
+              email: firebaseUser.email || '',
+              role: (firebaseUser.email === 'maudy@lazuardi.sch.id' || firebaseUser.email === 'hrd@lazuardi.sch.id') ? 'admin' : 'employee',
+              photoUrl: firebaseUser.photoURL || '',
+              createdAt: new Date().toISOString(),
+              niy: '',
+              nik: '',
+              unit: 'Lazuardi',
+              position: 'Staf',
+              contractStatus: 'Full Time',
+              entryDate: new Date().toISOString().split('T')[0],
+              gender: '',
+              birthPlace: '',
+              birthDate: '',
+              education: '',
+              phone: '',
+            };
+            await setDoc(userDocRef, newUser);
+            setProfile(newUser);
           }
         } catch (error) {
           console.error("Error fetching user profile:", error);
-          setAuthError("Terjadi kesalahan saat memproses akun. Silakan hubungi admin.");
+          // Fallback to minimal profile if Firestore fails (likely rules)
+          setProfile({
+            userId: firebaseUser.uid,
+            name: firebaseUser.displayName || 'User',
+            email: firebaseUser.email || '',
+            role: 'employee',
+            photoUrl: firebaseUser.photoURL || '',
+            createdAt: new Date().toISOString(),
+          } as UserProfile);
         } finally {
           setLoading(false);
         }
       } else {
         setProfile(null);
         setLoading(false);
-        // Do NOT clear authError here, let it persist for Login component
       }
     });
 
@@ -95,7 +84,7 @@ export default function App() {
       {user && profile ? (
         <Dashboard user={user} profile={profile} />
       ) : (
-        <Login onLogin={signInWithGoogle} externalError={authError} />
+        <Login onLogin={signInWithGoogle} />
       )}
     </div>
   );
