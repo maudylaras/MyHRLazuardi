@@ -32,7 +32,13 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
+      allow read: if isSignedIn() && (
+        isOwner(uid) || 
+        isAdmin() || 
+        (resource != null && 'email' in resource.data && resource.data.email == request.auth.token.email) ||
+        (resource != null && 'emailLower' in resource.data && resource.data.emailLower == request.auth.token.email)
+      );
+      allow write: if isSignedIn() && (isOwner(uid) || isAdmin());
 
       match /profile/{docId} {
         allow read, write: if isSignedIn() && (isOwner(uid) || isAdmin());
@@ -103,6 +109,10 @@ service cloud.firestore {
     match /faqItems/{docId} {
       allow get, list: if isSignedIn();
       allow create, update, delete: if isAdmin();
+    }
+
+    match /emailIndex/{emailLower} {
+      allow read, write: if isSignedIn() && (request.auth.token.email.toLowerCase().trim() == emailLower || isAdmin());
     }
   }
 }

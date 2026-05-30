@@ -806,6 +806,17 @@ export default function Dashboard({ user, profile }: DashboardProps) {
       
       const userRef = doc(db, 'users', userId);
       await setDoc(userRef, updatedEmp, { merge: true });
+
+      if (emp.email) {
+        const emailLower = emp.email.toLowerCase().trim();
+        await setDoc(doc(db, 'emailIndex', emailLower), {
+          uid: userId,
+          email: emp.email,
+          emailLower: emailLower,
+          linkedUserDocId: userId,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
       
       setAllEmployees(prev => {
         const index = prev.findIndex(e => e.userId === userId);

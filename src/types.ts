@@ -23,6 +23,12 @@ export interface UserProfile {
   role: 'employee' | 'admin';
   photoUrl?: string;
   idpLink?: string;
+  authUid?: string;
+  emailLower?: string;
+  originalProfileId?: string;
+  linkedAt?: any;
+  lastLoginAt?: any;
+  updatedAt?: any;
   emergencyContact?: {
     name: string;
     relationship: string;
