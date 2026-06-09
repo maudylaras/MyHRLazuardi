@@ -790,11 +790,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
   };
 
   const handleUpdateBarData = (newData: typeof barData) => {
+    if (!isAdmin) return;
     setBarData(newData);
     setIsEditingBar(false);
   };
 
   const handleUpdateAreaData = (newData: typeof areaData) => {
+    if (!isAdmin) return;
     setAreaData(newData);
     setIsEditingArea(false);
   };
@@ -1204,90 +1206,92 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                   onSave={handleUpdateProfile}
                 />
                 {/* Analytics Snapshot (Now at top) */}
-                <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
-                  <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100">
-                    <div className="mb-8 flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 leading-tight">Total Karyawan Per Unit</h3>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mt-2">Data Pertumbuhan Lazuardi</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => setIsEditingBar(true)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                          <PieChart size={20} />
+                {isAdmin && (
+                  <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+                    <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100">
+                      <div className="mb-8 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 leading-tight">Total Karyawan Per Unit</h3>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mt-2">Data Pertumbuhan Lazuardi</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => setIsEditingBar(true)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                            <PieChart size={20} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="h-72">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#00b5ad', fontSize: 10, fontWeight: 800}} dy={10} interval={0} />
-                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
-                          <Tooltip 
-                            cursor={{fill: '#f8fafc'}} 
-                            contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'}}
-                          />
-                          <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', paddingBottom: '20px'}} />
-                          <Bar dataKey="TK" stackId="a" fill="#bfdbfe" name="PRA TK/TK" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="SD" stackId="a" fill="#60a5fa" name="SD" />
-                          <Bar dataKey="SMP" stackId="a" fill="#2563eb" name="SMP" />
-                          <Bar dataKey="SUPPORT" stackId="a" fill="#1e3a8a" name="SUPPORT" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100">
-                    <div className="mb-8 flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 leading-tight">Total Resign Lazuardi</h3>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mt-2">Status Tidak Lanjut per TA</p>
+                      <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#00b5ad', fontSize: 10, fontWeight: 800}} dy={10} interval={0} />
+                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                            <Tooltip 
+                              cursor={{fill: '#f8fafc'}} 
+                              contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'}}
+                            />
+                            <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', paddingBottom: '20px'}} />
+                            <Bar dataKey="TK" stackId="a" fill="#bfdbfe" name="PRA TK/TK" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="SD" stackId="a" fill="#60a5fa" name="SD" />
+                            <Bar dataKey="SMP" stackId="a" fill="#2563eb" name="SMP" />
+                            <Bar dataKey="SUPPORT" stackId="a" fill="#1e3a8a" name="SUPPORT" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => setIsEditingArea(true)}
-                          className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
-                          <Activity size={20} />
+                    </div>
+                    <div className="rounded-[40px] bg-white p-10 shadow-sm border border-slate-100">
+                      <div className="mb-8 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 leading-tight">Total Resign Lazuardi</h3>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mt-2">Status Tidak Lanjut per TA</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => setIsEditingArea(true)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 transition-all"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                            <Activity size={20} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="h-72">
-                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={areaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#00b5ad', fontSize: 10, fontWeight: 800}} dy={10} interval={0} />
-                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
-                          <Tooltip 
-                            contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'}}
-                          />
-                          <Area 
-                            type="monotone" 
-                            dataKey="value" 
-                            stroke="#10b981" 
-                            strokeWidth={4} 
-                            fill="url(#colorValue)" 
-                            name="Total Resign"
-                          />
-                        </AreaChart>
-                       </ResponsiveContainer>
+                      <div className="h-72">
+                         <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={areaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#00b5ad', fontSize: 10, fontWeight: 800}} dy={10} interval={0} />
+                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                            <Tooltip 
+                              contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)'}}
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="value" 
+                              stroke="#10b981" 
+                              strokeWidth={4} 
+                              fill="url(#colorValue)" 
+                              name="Total Resign"
+                            />
+                          </AreaChart>
+                         </ResponsiveContainer>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* ADMIN HUB (Conditional) */}
                 {isAdmin && (
