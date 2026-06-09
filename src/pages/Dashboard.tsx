@@ -2479,6 +2479,11 @@ export default function Dashboard({ user, profile }: DashboardProps) {
             })()}
           </AnimatePresence>
         </div>
+
+        {/* Footer */}
+        <footer className="py-8 text-center text-slate-400 text-xs font-semibold tracking-wide border-t border-slate-100 max-w-7xl mx-auto w-full px-8">
+          © 2026 Lazuardi MyHR Dashboard • Administrator • maudy@lazuardi.sch.id
+        </footer>
       </main>
 
       {/* Floating Action Button */}
